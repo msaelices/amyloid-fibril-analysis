@@ -16,14 +16,15 @@ htmlcov/
 # Jupyter
 .ipynb_checkpoints/
 
-# Data & models -- never commit patient data or large binaries
-data/raw/**
-data/processed/**
-data/annotations/**
+# Data & models -- never commit patient data or large binaries.
+# Ignore data/ wholesale: listing subfolders individually meant any new one
+# (e.g. a derived dataset) silently defaulted to being tracked.
+data/**
 models/**
 *.mrc
 *.tif
 *.tiff
+*.pptx
 !**/.gitkeep
 !data/**/README.md
 
@@ -33,4 +34,5 @@ Thumbs.db
 
 # Outputs
 outputs/
+outputs_demo/
 *.log
