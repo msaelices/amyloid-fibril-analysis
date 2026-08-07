@@ -25,7 +25,9 @@ def main() -> None:
     ap.add_argument("--batch-size", type=int, default=8)
     ap.add_argument("--patch", type=int, default=256)
     ap.add_argument("--overlap", type=int, default=64)
-    ap.add_argument("--n-val", type=int, default=8, help="whole images held out")
+    ap.add_argument("--n-val", type=int, default=8, help="images for model selection")
+    ap.add_argument("--n-test", type=int, default=8,
+                    help="images never seen by training OR checkpoint selection")
     ap.add_argument("--base", type=int, default=16, help="U-Net base width")
     ap.add_argument("--depth", type=int, default=4)
     ap.add_argument("--lr", type=float, default=3e-4)
@@ -40,9 +42,15 @@ def main() -> None:
     from afa.segment.torch_unet import train
 
     image_ids = sorted(p.stem for p in (args.data / "images").glob("*.png"))
-    train_ids, val_ids = split_images(image_ids, n_val=args.n_val, seed=args.seed)
-    print(f"{len(image_ids)} images -> {len(train_ids)} train / {len(val_ids)} val")
-    print(f"validation images: {', '.join(val_ids)}")
+    train_ids, val_ids, test_ids = split_images(
+        image_ids, n_val=args.n_val, n_test=args.n_test, seed=args.seed
+    )
+    print(
+        f"{len(image_ids)} images -> {len(train_ids)} train / "
+        f"{len(val_ids)} val / {len(test_ids)} test"
+    )
+    print(f"val (selection):  {', '.join(val_ids)}")
+    print(f"test (untouched): {', '.join(test_ids)}")
 
     print("\nbuilding labels (snapping traces onto the ridge)...")
     items = load_labelled_images(
@@ -90,6 +98,7 @@ def main() -> None:
     report = {
         "train_ids": train_ids,
         "val_ids": val_ids,
+        "test_ids": test_ids,
         "best_val_loss": history.best_val,
         "best_epoch": history.best_epoch,
         "train_loss": history.train_loss,

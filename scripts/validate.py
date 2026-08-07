@@ -30,6 +30,9 @@ def main() -> None:
     ap.add_argument("--detector", choices=["unet", "classical"], default="unet")
     ap.add_argument("--out", type=Path, default=Path("outputs/validation"))
     ap.add_argument("--n-val", type=int, default=8)
+    ap.add_argument("--n-test", type=int, default=8)
+    ap.add_argument("--split", choices=["test", "val", "train"], default="test",
+                    help="which held-out split to report on; val was selected against")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--cache", type=Path, default=Path("data/dataset/cache"))
     ap.add_argument("--threshold", type=float, default=0.5)
@@ -55,13 +58,21 @@ def main() -> None:
     )
 
     image_ids = sorted(p.stem for p in (args.data / "images").glob("*.png"))
-    _, val_ids = split_images(image_ids, n_val=args.n_val, seed=args.seed)
-    print(f"validating on {len(val_ids)} held-out images: {', '.join(val_ids)}\n")
+    train_ids, val_ids, test_ids = split_images(
+        image_ids, n_val=args.n_val, n_test=args.n_test, seed=args.seed
+    )
+    chosen = {"train": train_ids, "val": val_ids, "test": test_ids}[args.split]
+    if not chosen:
+        raise SystemExit(f"the {args.split} split is empty; raise --n-{args.split}")
+    print(f"reporting on the {args.split} split, {len(chosen)} images: {', '.join(chosen)}")
+    if args.split == "val":
+        print("WARNING: the checkpoint was selected on these images; scores are optimistic")
+    print()
 
     items = load_labelled_images(
         args.data / "images",
         args.data / "traces",
-        image_ids=val_ids,
+        image_ids=chosen,
         cache_dir=args.cache,
         width_px=args.width_px,
     )
@@ -94,7 +105,18 @@ def main() -> None:
         cover = coverage_report(item.centerlines, predicted, tolerance=args.coverage_tolerance)
         row = {
             "image_id": item.image_id,
-            "dice": dice(pred_mask & valid, item.mask & valid),
+            # Two Dice values, always reported together. The labelled one skips
+            # pixels whose truth is unknown, which is the defensible thing to do
+            # under partial annotation -- but the ignore mask is by construction
+            # the ridge-like pixels, i.e. exactly where a fibril detector's
+            # excess predictions land, so it flatters any over-predicting model.
+            # The unrestricted one is pessimistic for the opposite reason: it
+            # counts untraced real fibrils as errors. The truth is between them.
+            "dice_labelled": dice(pred_mask & valid, item.mask & valid),
+            "dice_all_pixels": dice(pred_mask, item.mask),
+            "ignored_fraction": float(item.ignore.mean()),
+            "predicted_fraction": float(pred_mask.mean()),
+            "mask_fraction": float(item.mask.mean()),
             "iou": iou(pred_mask & valid, item.mask & valid),
             "n_manual": match.n_gt,
             "n_detected": match.n_pred,
@@ -103,11 +125,13 @@ def main() -> None:
             "mean_coverage": float(cover.mean()) if cover.size else float("nan"),
             "fibrils_80pct_covered": int((cover >= 0.8).sum()),
             "precision_lower_bound": match.precision_lower_bound,
-            "fragmentation": match.fragmentation,
+            "detections_per_matched_fibril": match.detections_per_matched_fibril,
         }
         per_image.append(row)
         print(
-            f"{item.image_id}: dice={row['dice']:.3f} "
+            f"{item.image_id}: dice {row['dice_labelled']:.3f} labelled / "
+            f"{row['dice_all_pixels']:.3f} all px "
+            f"(ignored {100 * row['ignored_fraction']:.0f}%)  "
             f"coverage={row['mean_coverage']:.2f} "
             f"recall={row['recall']:.2f} ({len(match.pairs)}/{match.n_gt}) "
             f"detected={match.n_pred}"
@@ -134,11 +158,17 @@ def main() -> None:
     errors = summarize_errors(comparison)
     errors.to_csv(args.out / "metric_errors.csv", index=False)
 
+    def _mean(col: str) -> float:
+        return float(per_image_df[col].mean()) if len(per_image_df) else float("nan")
+
     summary = {
         "detector": args.detector,
+        "split": args.split,
         "n_images": len(per_image_df),
-        "mean_dice": float(per_image_df["dice"].mean()) if len(per_image_df) else float("nan"),
-        "mean_iou": float(per_image_df["iou"].mean()) if len(per_image_df) else float("nan"),
+        "mean_dice_labelled": _mean("dice_labelled"),
+        "mean_dice_all_pixels": _mean("dice_all_pixels"),
+        "mean_ignored_fraction": _mean("ignored_fraction"),
+        "mean_iou": _mean("iou"),
         "total_manual": int(per_image_df["n_manual"].sum()) if len(per_image_df) else 0,
         "total_matched": int(per_image_df["matched"].sum()) if len(per_image_df) else 0,
         "overall_recall": (
@@ -146,14 +176,17 @@ def main() -> None:
             if len(per_image_df) and per_image_df["n_manual"].sum()
             else float("nan")
         ),
-        "mean_coverage": (
-            float(per_image_df["mean_coverage"].mean()) if len(per_image_df) else float("nan")
-        ),
+        "mean_coverage": _mean("mean_coverage"),
     }
     (args.out / "summary.json").write_text(json.dumps(summary, indent=2))
 
-    print(f"\n{'=' * 60}\ndetector: {args.detector}")
-    print(f"mean Dice {summary['mean_dice']:.3f} | mean IoU {summary['mean_iou']:.3f}")
+    print(f"\n{'=' * 60}\ndetector: {args.detector}  |  split: {args.split}")
+    print(
+        f"mean Dice {summary['mean_dice_labelled']:.3f} on labelled pixels, "
+        f"{summary['mean_dice_all_pixels']:.3f} on all pixels "
+        f"({100 * summary['mean_ignored_fraction']:.0f}% of each image is unlabelled "
+        f"and excluded from the first)"
+    )
     print(f"mean coverage of manual fibrils {summary['mean_coverage']:.2f}")
     print(
         f"one-to-one fibril recall {summary['overall_recall']:.2f} "
