@@ -16,23 +16,73 @@ htmlcov/
 # Jupyter
 .ipynb_checkpoints/
 
-# Data & models -- never commit patient data or large binaries.
-# Ignore data/ wholesale: listing subfolders individually meant any new one
-# (e.g. a derived dataset) silently defaulted to being tracked.
+# ---------------------------------------------------------------------------
+# PATIENT DATA -- must never leave this machine.
+#
+# Deny by default. Whole directories are ignored and the handful of tracked
+# placeholders are re-included explicitly, so anything new dropped inside them
+# is ignored without anyone having to remember to add a rule. The extension
+# rules below are the safety net for files dropped outside those directories,
+# which is how a 58 MB deck of micrographs once ended up in the repo root.
+#
+# To commit something these rules catch (a documentation figure, say), be
+# explicit about it: git add -f docs/img/pipeline.png
+# ---------------------------------------------------------------------------
 data/**
 models/**
-*.mrc
-*.tif
-*.tiff
-*.pptx
+outputs/
+outputs_demo/
+
+# Re-include the directory scaffolding: git will not descend into an excluded
+# directory, so without these the placeholder rules below can never match.
+!data/**/
+!models/**/
 !**/.gitkeep
 !data/**/README.md
+
+# Micrographs, stacks and volumes
+*.mrc
+*.mrcs
+*.map
+*.rec
+*.st
+*.ali
+*.eer
+*.dm3
+*.dm4
+*.emd
+*.ser
+*.tif
+*.tiff
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.gif
+
+# Annotations and tabular exports that may carry patient identifiers
+*.pptx
+*.ppt
+*.odp
+*.xlsx
+*.xls
+*.roi
+*.star
+*.csv
+RoiSet*.zip
+
+# Trained weights and cached arrays
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.npy
+*.npz
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Outputs
-outputs/
-outputs_demo/
+# Logs
 *.log
