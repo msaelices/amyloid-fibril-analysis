@@ -121,6 +121,33 @@ def build_labels(
     return mask, ignore, centerlines
 
 
+def _cache_key(
+    images_dir: Path, traces_dir: Path, ids: list[str], label_kwargs: dict
+) -> str:
+    """Cache key covering the labelling parameters *and* the inputs themselves.
+
+    Keying on the keyword arguments alone was not enough: re-importing the
+    annotations rewrites the trace CSVs without changing any parameter, and the
+    stale masks were served back silently. The trace files are hashed by content
+    (they are small); images by size and mtime, since they are large and are not
+    edited in place.
+    """
+    import hashlib
+
+    h = hashlib.sha256()
+    for k, v in sorted(label_kwargs.items()):
+        h.update(f"{k}={v!r};".encode())
+    for image_id in ids:
+        trace_path = traces_dir / f"{image_id}.csv"
+        image_path = images_dir / f"{image_id}.png"
+        if trace_path.exists():
+            h.update(trace_path.read_bytes())
+        if image_path.exists():
+            stat = image_path.stat()
+            h.update(f"{image_id}:{stat.st_size}:{int(stat.st_mtime)};".encode())
+    return h.hexdigest()[:16]
+
+
 def load_labelled_images(
     images_dir: str | Path,
     traces_dir: str | Path,
@@ -133,13 +160,14 @@ def load_labelled_images(
 
     Label building runs a multiscale ridge filter and a dynamic program per
     trace, which costs tens of seconds per micrograph. Pass ``cache_dir`` to
-    persist the result; the cache key includes the labelling parameters, so
-    changing them rebuilds rather than silently reusing stale masks.
+    persist the result; the key covers the labelling parameters *and* the
+    content of the trace files, so re-importing the annotations invalidates the
+    cache instead of silently serving stale masks.
     """
     images_dir, traces_dir = Path(images_dir), Path(traces_dir)
     ids = image_ids or sorted(p.stem for p in images_dir.glob("*.png"))
 
-    key = "_".join(f"{k}={v}" for k, v in sorted(label_kwargs.items())) or "default"
+    key = _cache_key(images_dir, traces_dir, ids, label_kwargs)
     cache = Path(cache_dir) / key if cache_dir else None
     if cache is not None:
         cache.mkdir(parents=True, exist_ok=True)
@@ -170,13 +198,26 @@ def load_labelled_images(
     return out
 
 
-def split_images(image_ids: list[str], *, n_val: int, seed: int = 0) -> tuple[list[str], list[str]]:
-    """Deterministically hold out ``n_val`` whole images for validation."""
-    if n_val >= len(image_ids):
-        raise ValueError(f"n_val ({n_val}) must be < number of images ({len(image_ids)})")
+def split_images(
+    image_ids: list[str], *, n_val: int, n_test: int = 0, seed: int = 0
+) -> tuple[list[str], list[str], list[str]]:
+    """Deterministically split whole images into train / val / test.
+
+    Three ways, not two, and the distinction is not pedantry: the training loop
+    keeps the checkpoint that scores best on the validation images, so those
+    images have been selected on and any score reported over them is optimistic.
+    Reporting belongs on the test split, which nothing ever selects against.
+    """
+    if n_val + n_test >= len(image_ids):
+        raise ValueError(
+            f"n_val + n_test ({n_val + n_test}) must be < number of images ({len(image_ids)})"
+        )
     rng = np.random.default_rng(seed)
     shuffled = list(np.asarray(sorted(image_ids))[rng.permutation(len(image_ids))])
-    return sorted(shuffled[n_val:]), sorted(shuffled[:n_val])
+    test = shuffled[:n_test]
+    val = shuffled[n_test:n_test + n_val]
+    train = shuffled[n_test + n_val:]
+    return sorted(train), sorted(val), sorted(test)
 
 
 def sample_patches(
