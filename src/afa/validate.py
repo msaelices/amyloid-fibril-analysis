@@ -124,8 +124,16 @@ class MatchResult:
         return len(self.pairs) / self.n_pred if self.n_pred else float("nan")
 
     @property
-    def fragmentation(self) -> float:
-        """Detections per matched manual fibril; 1.0 means one trace per fibril."""
+    def detections_per_matched_fibril(self) -> float:
+        """Detections divided by matches.
+
+        NOT a fragmentation rate, despite the temptation to read it as one. Its
+        numerator is the same ``n_pred`` that makes precision a lower bound:
+        under partial annotation most detections are real fibrils nobody traced,
+        so 60 perfect traces of 60 fibrils with 1 annotated scores 60.0 with
+        nothing fragmented. Use it only alongside coverage, which does separate
+        the two.
+        """
         return self.n_pred / len(self.pairs) if self.pairs else float("nan")
 
 
@@ -158,7 +166,13 @@ def match_traces(
         for j, g in enumerate(ground_truth):
             cost[i, j] = centerline_distance(p, g)
 
-    rows, cols = linear_sum_assignment(cost)
+    # Maximize the number of matches first, then minimize total distance among
+    # them. Running the assignment on raw cost and thresholding afterwards can
+    # discard a feasible pair to save distance elsewhere, undercounting recall.
+    # Any penalty above the largest possible sum of feasible costs achieves the
+    # lexicographic ordering.
+    infeasible = float(max_distance) * (min(n_pred, n_gt) + 1) + 1.0
+    rows, cols = linear_sum_assignment(np.where(cost <= max_distance, cost, infeasible))
     pairs = [
         (int(i), int(j), float(cost[i, j]))
         for i, j in zip(rows, cols, strict=True)

@@ -62,7 +62,7 @@ def test_match_pairs_each_manual_fibril_once():
     assert m.recall == pytest.approx(1.0)
     assert m.unmatched_pred == [2]
     assert m.precision_lower_bound == pytest.approx(2 / 3)
-    assert m.fragmentation == pytest.approx(3 / 2)
+    assert m.detections_per_matched_fibril == pytest.approx(3 / 2)
 
 
 def test_match_rejects_far_assignments():
@@ -72,6 +72,22 @@ def test_match_rejects_far_assignments():
     assert m.pairs == []
     assert m.recall == pytest.approx(0.0)
     assert m.unmatched_gt == [0]
+
+
+def test_match_maximizes_the_number_of_matches_not_total_distance():
+    """A min-total assignment can drop a feasible pair to save distance elsewhere.
+
+    These three centerlines produce a cost matrix where the cheapest total
+    assignment includes one pair just over the threshold, which is then
+    discarded, reporting 2 matches where 3 are feasible.
+    """
+    gt = [_line(0, 100, 0), _line(0, 100, 400), _line(0, 100, 800)]
+    pred = [_line(0, 100, 9), _line(0, 100, 409), _line(0, 100, 806)]
+
+    m = match_traces(pred, gt, max_distance=15.0)
+
+    assert len(m.pairs) == 3
+    assert m.recall == pytest.approx(1.0)
 
 
 def test_match_handles_empty_sides():
