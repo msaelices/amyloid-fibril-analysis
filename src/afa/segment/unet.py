@@ -65,28 +65,87 @@ def rasterize_traces(
 
 
 class UNetSegmenter:
-    """Thin wrapper around a U-Net for fibril probability prediction.
+    """A trained U-Net exposed as a full-micrograph fibril-probability predictor.
 
-    The implementation is deferred until a sample image + traces are available
-    so the architecture/patching can be tuned to the real data. The interface is
-    fixed so the rest of the pipeline (tracing, metrics) does not change when the
-    model lands.
+    Interface parity with :func:`afa.segment.classical.vesselness_probability` is
+    the point: both return a ``[0, 1]`` map of the same shape as the input, so
+    the tracing and metric stages are identical whichever detector produced it.
+
+    Inference is tiled and blended (see :mod:`afa.segment.tiling`), because a
+    micrograph does not fit in one forward pass and butt-joined patches leave
+    seams that the skeletonizer turns into false fibril breaks.
     """
 
-    def __init__(self, weights: str | Path | None = None, device: str = "cpu") -> None:
+    def __init__(
+        self,
+        weights: str | Path | None = None,
+        device: str | None = None,
+        *,
+        patch: int = 256,
+        overlap: int = 64,
+        batch_size: int = 8,
+    ) -> None:
         self.weights = Path(weights) if weights else None
         self.device = device
+        self.patch = patch
+        self.overlap = overlap
+        self.batch_size = batch_size
         self._model = None
 
     def load(self) -> UNetSegmenter:
-        raise NotImplementedError(
-            "U-Net weights loading is not implemented yet. Train a model with the "
-            "recipe in this module's docstring, then wire loading here."
+        """Load the checkpoint. Requires the ``dl`` optional dependencies."""
+        if self.weights is None:
+            raise ValueError("UNetSegmenter needs a path to trained weights")
+        if not self.weights.exists():
+            raise FileNotFoundError(f"No U-Net weights at {self.weights}")
+
+        import torch
+
+        from afa.segment.torch_unet import load_model
+
+        self.device = self.device or ("cuda" if torch.cuda.is_available() else "cpu")
+        self._model = load_model(self.weights, device=self.device)
+        return self
+
+    def predict(self, image: np.ndarray) -> np.ndarray:
+        """Return a ``[0, 1]`` fibril-probability map for a full micrograph.
+
+        The image is normalized the same way as during training, so passing a
+        raw micrograph is fine.
+        """
+        import torch
+
+        from afa.segment.tiling import stitch, tile_positions
+
+        if self._model is None:
+            self.load()
+
+        img = np.asarray(image, dtype=np.float32)
+        lo, hi = np.percentile(img, [1.0, 99.0])
+        # np.percentile returns float64; without the cast the whole map is
+        # promoted to double and the forward pass fails on a float32 model.
+        img = (
+            np.clip((img - lo) / (hi - lo), 0.0, 1.0).astype(np.float32)
+            if hi > lo
+            else np.zeros_like(img)
         )
 
-    def predict(self, image: np.ndarray) -> np.ndarray:  # pragma: no cover - stub
-        """Return a [0, 1] fibril-probability map for a full micrograph."""
-        raise NotImplementedError(
-            "Provide trained weights and implement tiled inference. Until then use "
-            "afa.segment.classical.vesselness_probability as the detector."
-        )
+        pad_y = max(self.patch - img.shape[0], 0)
+        pad_x = max(self.patch - img.shape[1], 0)
+        if pad_y or pad_x:
+            img = np.pad(img, ((0, pad_y), (0, pad_x)), mode="reflect")
+
+        positions = tile_positions(img.shape, self.patch, self.overlap)
+        probs: list[np.ndarray] = []
+        with torch.no_grad():
+            for start in range(0, len(positions), self.batch_size):
+                chunk = positions[start:start + self.batch_size]
+                batch = np.stack(
+                    [img[y:y + self.patch, x:x + self.patch] for y, x in chunk]
+                )[:, None]
+                tensor = torch.from_numpy(batch).to(self.device)
+                out = torch.sigmoid(self._model(tensor)).cpu().numpy()[:, 0]
+                probs.extend(out)
+
+        full = stitch(probs, positions, img.shape)
+        return full[: image.shape[0], : image.shape[1]].astype(np.float32)
