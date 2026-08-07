@@ -33,7 +33,6 @@ def save_overlay(
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    from matplotlib import cm
 
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -45,7 +44,9 @@ def save_overlay(
     fig, ax = plt.subplots(figsize=(disp.shape[1] / 200, disp.shape[0] / 200))
     ax.imshow(disp, cmap="gray", interpolation="nearest")
 
-    colors = cm.get_cmap("hsv", max(len(centerlines), 1))
+    # `cm.get_cmap` was removed in matplotlib 3.9; `colormaps[...].resampled`
+    # is the supported equivalent (available since 3.6).
+    colors = matplotlib.colormaps["hsv"].resampled(max(len(centerlines), 1))
     for i, cl in enumerate(centerlines):
         cl = np.asarray(cl)
         ax.plot(cl[:, 0], cl[:, 1], "-", lw=linewidth, color=colors(i))
