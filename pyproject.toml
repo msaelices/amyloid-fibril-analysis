@@ -20,6 +20,7 @@ dependencies = [
     "typer>=0.12",
     "roifile>=2024.1.10",   # read ImageJ .roi / RoiSet.zip
     "tifffile>=2024.1.0",
+    "pillow>=10.0",         # used directly by afa.segment.dataset
 ]
 
 [project.optional-dependencies]

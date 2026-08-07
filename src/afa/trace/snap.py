@@ -40,6 +40,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+from scipy.ndimage import map_coordinates
 
 from afa.trace.resample import resample_polyline, smooth_polyline
 
@@ -100,8 +101,6 @@ def _unit_normals(points: np.ndarray) -> np.ndarray:
 
 def _sample(field: np.ndarray, xy: np.ndarray) -> np.ndarray:
     """Bilinear sample of ``field`` at ``(x, y)`` coordinates, 0 outside."""
-    from scipy.ndimage import map_coordinates
-
     return map_coordinates(
         field, [xy[..., 1].ravel(), xy[..., 0].ravel()], order=1, mode="constant", cval=0.0
     ).reshape(xy.shape[:-1])

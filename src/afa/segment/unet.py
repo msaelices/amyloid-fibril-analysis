@@ -1,25 +1,16 @@
-"""Learned fibril segmenter (U-Net) -- interface and training scaffold.
+"""Learned fibril segmenter (U-Net): mask rasterization and inference.
 
-This module intentionally keeps a thin, documented interface. It is the
-recommended detector once the ~20-30 manually traced images are available: the
-traces are rasterized into masks and a small U-Net learns to separate fibrils
-from background noise far better than any fixed threshold.
+The public surface is deliberately thin, and identical in shape to the classical
+detector, so the tracing and metric stages never learn which one produced a map.
 
-Heavy ML deps (torch, segmentation-models-pytorch, albumentations) live behind
-the ``dl`` optional-dependency group so the deterministic core installs light.
+torch lives behind the ``dl`` optional-dependency group, so this module must
+stay importable without it: only :meth:`UNetSegmenter.load` and
+:meth:`UNetSegmenter.predict` may touch it, and they import it themselves.
 
-Recommended recipe
-------------------
-* Rasterize each manual trace to a binary mask with a fibril-width kernel
-  (``rasterize_traces``).
-* Tile each micrograph into overlapping patches (e.g. 512x512).
-* Augment with flips + 90-degree rotations (fibrils are orientation-invariant).
-* Hold out ~5-8 whole images for validation -- never split patches from the same
-  image across train/val.
-* Train a U-Net (e.g. ``segmentation_models_pytorch.Unet`` with a resnet34
-  encoder) using Dice + BCE loss.
-* At inference, tile, predict, and stitch to a full-image probability map, then
-  hand it to :func:`afa.trace.trace_centerlines`.
+The pieces that do need torch live elsewhere: the architecture, the masked loss
+and the training loop in :mod:`afa.segment.torch_unet`, the patch dataset in
+:mod:`afa.segment.dataset`, and tiling in :mod:`afa.segment.tiling`. Training is
+driven by ``scripts/train_unet.py``.
 """
 
 from __future__ import annotations
@@ -27,8 +18,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+from skimage.draw import line
+from skimage.morphology import binary_dilation, disk
 
 from afa.io.annotations import Trace
+from afa.segment.tiling import stitch, tile_positions
 
 
 def rasterize_traces(
@@ -49,9 +43,6 @@ def rasterize_traces(
         Line thickness (dilation radius) in pixels -- set to the typical fibril
         width so the mask covers the fibril, not just its centerline.
     """
-    from skimage.draw import line
-    from skimage.morphology import binary_dilation, disk
-
     mask = np.zeros(shape, dtype=bool)
     for tr in traces:
         pts = np.round(tr.points).astype(int)
@@ -99,6 +90,8 @@ class UNetSegmenter:
         if not self.weights.exists():
             raise FileNotFoundError(f"No U-Net weights at {self.weights}")
 
+        # Deferred: torch is an optional dependency (the ``dl`` extra), so
+        # importing this module must not require it -- only using the U-Net does.
         import torch
 
         from afa.segment.torch_unet import load_model
@@ -113,9 +106,7 @@ class UNetSegmenter:
         The image is normalized the same way as during training, so passing a
         raw micrograph is fine.
         """
-        import torch
-
-        from afa.segment.tiling import stitch, tile_positions
+        import torch  # optional dependency; see load()
 
         if self._model is None:
             self.load()

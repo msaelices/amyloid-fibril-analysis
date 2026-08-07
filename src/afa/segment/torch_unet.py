@@ -18,6 +18,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from torch import nn
+from torch.utils.data import DataLoader
 
 
 def _block(in_ch: int, out_ch: int) -> nn.Sequential:
@@ -120,8 +121,6 @@ def train(
     log: bool = True,
 ) -> TrainHistory:
     """Train a U-Net and save the best-validation weights to ``out_path``."""
-    from torch.utils.data import DataLoader
-
     torch.manual_seed(seed)
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     model = UNet(base=base, depth=depth).to(device)

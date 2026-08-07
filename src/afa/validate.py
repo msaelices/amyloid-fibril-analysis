@@ -21,9 +21,12 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+from scipy.optimize import linear_sum_assignment
+from scipy.spatial import cKDTree
 
 from afa.morphology.metrics import compute_metrics
 from afa.stats import METRIC_COLUMNS
+from afa.trace.resample import resample_polyline
 
 
 def dice(a: np.ndarray, b: np.ndarray) -> float:
@@ -51,8 +54,6 @@ def centerline_distance(a: np.ndarray, b: np.ndarray) -> float:
     short fragment sitting on top of a long ``b``, which is exactly the failure
     mode (fragmentation) this is meant to expose.
     """
-    from scipy.spatial import cKDTree
-
     a = np.asarray(a, dtype=float).reshape(-1, 2)
     b = np.asarray(b, dtype=float).reshape(-1, 2)
     a_to_b = cKDTree(b).query(a)[0].mean()
@@ -75,10 +76,6 @@ def centerline_coverage(
     together say which failure is happening: low coverage means the fibril was
     missed, high coverage with zero matches means it was found but fragmented.
     """
-    from scipy.spatial import cKDTree
-
-    from afa.trace.resample import resample_polyline
-
     gt = resample_polyline(np.asarray(ground_truth, dtype=float), step=step)
     if not predicted:
         return 0.0
@@ -155,8 +152,6 @@ def match_traces(
     max_distance:
         Largest mean centerline separation still considered the same fibril.
     """
-    from scipy.optimize import linear_sum_assignment
-
     n_pred, n_gt = len(predicted), len(ground_truth)
     if n_pred == 0 or n_gt == 0:
         return MatchResult([], list(range(n_pred)), list(range(n_gt)), n_pred, n_gt)

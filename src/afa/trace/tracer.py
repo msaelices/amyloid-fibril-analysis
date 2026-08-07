@@ -24,6 +24,8 @@ keeps a human in the loop to confirm ambiguous crossings.
 
 from __future__ import annotations
 
+from collections import defaultdict
+
 import numpy as np
 
 from afa.trace.resample import resample_polyline, smooth_polyline
@@ -188,8 +190,6 @@ def _link_and_finish(
     max_cos = np.cos(np.deg2rad(max_link_angle_deg))  # near +1 for a small turn
 
     # Index branches by the nodes they touch.
-    from collections import defaultdict
-
     by_node: dict[int, list[int]] = defaultdict(list)
     for idx, b in enumerate(branches):
         by_node[b["src"]].append(idx)

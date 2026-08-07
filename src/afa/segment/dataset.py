@@ -21,13 +21,19 @@ the validation score.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+from PIL import Image
+from skimage.morphology import binary_dilation, disk
 
 from afa.io.annotations import Trace, load_traces
+from afa.segment.classical import vesselness_probability
 from afa.segment.tiling import tile_positions
+from afa.segment.unet import rasterize_traces
+from afa.trace.snap import snap_to_ridge
 
 
 @dataclass
@@ -47,8 +53,6 @@ class LabelledImage:
 
 def load_grayscale(path: str | Path) -> np.ndarray:
     """Load a PNG/TIFF micrograph as float32 in [0, 1] via percentile clipping."""
-    from PIL import Image
-
     arr = np.asarray(Image.open(path).convert("L"), dtype=np.float32)
     lo, hi = np.percentile(arr, [1.0, 99.0])
     if hi <= lo:
@@ -93,12 +97,6 @@ def build_labels(
     -------
     ``(mask, ignore, centerlines)``
     """
-    from skimage.morphology import binary_dilation, disk
-
-    from afa.segment.classical import vesselness_probability
-    from afa.segment.unet import rasterize_traces
-    from afa.trace.snap import snap_to_ridge
-
     ridge = vesselness_probability(image, invert=True, sigmas=(2.0, 3.0, 4.0, 5.0))
 
     centerlines = []
@@ -132,8 +130,6 @@ def _cache_key(
     (they are small); images by size and mtime, since they are large and are not
     edited in place.
     """
-    import hashlib
-
     h = hashlib.sha256()
     for k, v in sorted(label_kwargs.items()):
         h.update(f"{k}={v!r};".encode())
@@ -290,6 +286,8 @@ class PatchDataset:
         return len(self.index)
 
     def __getitem__(self, idx: int):
+        # Deferred: torch is an optional dependency (the ``dl`` extra) and the
+        # deterministic pipeline must import and run without it.
         import torch
 
         i, y, x = self.index[idx]
