@@ -47,6 +47,7 @@ def trace_centerlines(
     min_branch_px: int = 10,
     link_crossings: bool = True,
     max_link_angle_deg: float = 35.0,
+    merge_junction_px: float = 15.0,
 ) -> list[np.ndarray]:
     """Trace ordered centerlines from a binary fibril mask.
 
@@ -57,7 +58,14 @@ def trace_centerlines(
     resample_step, smooth_window:
         Passed to the resample/smooth step (pixel units).
     min_branch_px:
-        Drop skeleton branches shorter than this (removes spurs/noise).
+        Drop free-ended skeleton branches shorter than this (removes spurs and
+        noise). Junction-to-junction branches are exempt: they are structure,
+        not noise.
+    merge_junction_px:
+        Junction-to-junction branches shorter than this are treated as the
+        bridge of a single crossing and their two endpoints collapsed into one
+        node. Set it to roughly the fibril width; too large merges genuinely
+        distinct junctions.
     link_crossings:
         If ``True``, greedily link branches across junctions by orientation.
     max_link_angle_deg:
@@ -78,21 +86,41 @@ def trace_centerlines(
     skeleton = Skeleton(skel_img)
     summary = summarize(skeleton, separator="_")
 
-    # Collect branch paths as (x, y) polylines in image coordinates.
-    branches: list[dict] = []
+    raw = []
     for i in range(skeleton.n_paths):
         coords_rc = skeleton.path_coordinates(i)  # (row, col)
         if len(coords_rc) < 2:
             continue
-        length_px = float(summary.loc[i, "branch_distance"])
-        if length_px < min_branch_px:
-            continue
-        coords_xy = coords_rc[:, ::-1].astype(float)  # -> (x, y)
-        branches.append(
+        raw.append(
             {
-                "coords": coords_xy,
+                "coords": coords_rc[:, ::-1].astype(float),  # -> (x, y)
                 "src": int(summary.loc[i, "node_id_src"]),
                 "dst": int(summary.loc[i, "node_id_dst"]),
+                "length": float(summary.loc[i, "branch_distance"]),
+                # skan branch types: 1 = junction-to-endpoint, 2 =
+                # junction-to-junction. Only the former can be a noise spur.
+                "internal": int(summary.loc[i, "branch_type"]) == 2,
+                "used": False,
+            }
+        )
+
+    node_of = _merge_close_junctions(raw, merge_junction_px)
+
+    branches: list[dict] = []
+    for b in raw:
+        # A short junction-to-junction branch is the bridge of a crossing, not a
+        # spur; it has been absorbed into a merged node and must not survive as
+        # a separate fibril. Length filtering applies only to free-ended
+        # branches, which are the actual noise.
+        if b["internal"] and b["length"] < merge_junction_px:
+            continue
+        if not b["internal"] and b["length"] < min_branch_px:
+            continue
+        branches.append(
+            {
+                "coords": b["coords"],
+                "src": node_of[b["src"]],
+                "dst": node_of[b["dst"]],
                 "used": False,
             }
         )
@@ -106,6 +134,39 @@ def trace_centerlines(
     return _link_and_finish(branches, resample_step, smooth_window, max_link_angle_deg)
 
 
+def _merge_close_junctions(raw: list[dict], merge_junction_px: float) -> dict[int, int]:
+    """Map each skeleton node to a representative, collapsing crossing bridges.
+
+    Skeletonizing an X does not produce one node: it produces two Y-junctions
+    joined by a short bridge. Left alone, the four fibril halves attach to two
+    different nodes and no two halves of the same fibril ever share one, so the
+    crossing can never be linked through. Worse, dropping that bridge as a
+    "short branch" is what disconnects them.
+
+    Union-find over short junction-to-junction branches collapses the pair into
+    a single node, after which all four halves meet at one place and the
+    orientation test can pair them up.
+    """
+    parent: dict[int, int] = {}
+
+    def find(a: int) -> int:
+        parent.setdefault(a, a)
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    for b in raw:
+        parent.setdefault(b["src"], b["src"])
+        parent.setdefault(b["dst"], b["dst"])
+        if b["internal"] and b["length"] < merge_junction_px:
+            ra, rb = find(b["src"]), find(b["dst"])
+            if ra != rb:
+                parent[rb] = ra
+
+    return {node: find(node) for node in parent}
+
+
 def _finish(coords: np.ndarray, step: float, window: int) -> np.ndarray:
     return smooth_polyline(resample_polyline(coords, step=step), window=window)
 
@@ -116,8 +177,15 @@ def _link_and_finish(
     window: int,
     max_link_angle_deg: float,
 ) -> list[np.ndarray]:
-    """Greedily chain branches that share a node and continue smoothly."""
-    max_cos = np.cos(np.deg2rad(180.0 - max_link_angle_deg))  # near -1 for small angle
+    """Greedily chain branches that share a node and continue smoothly.
+
+    Convention that makes the angle test work: ``ref_dir`` and ``cdir`` both
+    point *away* from the shared junction. Two branches that continue each other
+    straight through are then antiparallel, so ``dot(ref_dir, -cdir) == 1`` and a
+    turn of ``theta`` degrees gives ``cos(theta)``. The acceptance threshold is
+    therefore ``cos(max_link_angle_deg)``.
+    """
+    max_cos = np.cos(np.deg2rad(max_link_angle_deg))  # near +1 for a small turn
 
     # Index branches by the nodes they touch.
     from collections import defaultdict
@@ -150,16 +218,24 @@ def _extend(chain, current, node_key, branches, by_node, max_cos, *, forward):
         candidates = [j for j in by_node[node] if not branches[j]["used"]]
         if not candidates:
             return
-        # Direction of the current chain approaching the node.
+        # Direction of the current chain at the node, pointing AWAY from it so
+        # that it is directly comparable with the candidates' directions.
         tail = np.asarray(chain[-5:] if forward else chain[:5])
         ref_dir = _branch_direction(tail, at_start=not forward)
+        if forward:
+            ref_dir = -ref_dir
 
-        best, best_cos = None, -2.0
+        best, best_cos, best_at_start = None, -2.0, False
         for j in candidates:
             cand = branches[j]
             at_start = cand["src"] == node
             cdir = _branch_direction(cand["coords"], at_start=at_start)
-            # Collinear continuation => ref_dir and cdir roughly opposite.
+            if not at_start:
+                # The branch meets the node by its far end, so that direction
+                # points into the node; flip it to point away like the others.
+                cdir = -cdir
+            # Both vectors now point away from the node, so a straight
+            # continuation is antiparallel and this is the cosine of the turn.
             cos = float(np.dot(ref_dir, -cdir))
             if cos > best_cos:
                 best, best_cos, best_at_start = j, cos, at_start

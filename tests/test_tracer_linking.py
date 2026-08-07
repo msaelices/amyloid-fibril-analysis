@@ -1,0 +1,85 @@
+"""Tests for junction linking in the skeleton tracer.
+
+The whole point of the linking step is that a fibril passing under another is
+followed *through* the crossing instead of being truncated or spliced onto the
+wrong branch. These tests pin the angle convention, which was silently inverted:
+collinear continuations were rejected and near-180-degree doubling back accepted.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+from afa.trace.tracer import trace_centerlines
+
+
+def _draw(mask: np.ndarray, p0, p1, width: int = 1) -> None:
+    from skimage.draw import line
+
+    rr, cc = line(int(p0[1]), int(p0[0]), int(p1[1]), int(p1[0]))
+    for dy in range(-width, width + 1):
+        for dx in range(-width, width + 1):
+            y, x = np.clip(rr + dy, 0, mask.shape[0] - 1), np.clip(cc + dx, 0, mask.shape[1] - 1)
+            mask[y, x] = True
+
+
+def _lengths(centerlines):
+    return sorted(
+        float(np.linalg.norm(np.diff(np.asarray(c), axis=0), axis=1).sum())
+        for c in centerlines
+    )
+
+
+def test_straight_fibril_survives_a_spur():
+    """A sharp spur must not be linked; the straight run stays one centerline."""
+    mask = np.zeros((300, 400), dtype=bool)
+    _draw(mask, (20, 200), (380, 200))     # straight fibril
+    _draw(mask, (200, 200), (182, 100))    # steep spur off its middle
+
+    out = trace_centerlines(mask, min_branch_px=15, link_crossings=True)
+    lengths = _lengths(out)
+
+    # The long fibril is recovered whole, not doubled back on itself.
+    assert max(lengths) == pytest.approx(360, abs=25)
+    assert max(lengths) < 500, f"a doubled-back chain appeared: {lengths}"
+
+
+def test_crossing_fibrils_are_followed_through():
+    """Two fibrils crossing at a shallow angle stay two, each end to end.
+
+    Their true lengths are deliberately different (400 vs ~284 px) so that the
+    old failure mode is detectable: splicing half of one onto half of the other
+    produced two near-equal middling lengths instead.
+    """
+    mask = np.zeros((400, 500), dtype=bool)
+    _draw(mask, (50, 200), (450, 200))     # horizontal, 400 px
+    _draw(mask, (150, 80), (330, 300))     # diagonal crossing it, ~284 px
+
+    out = trace_centerlines(mask, min_branch_px=15, link_crossings=True)
+    lengths = _lengths(out)
+
+    assert len(out) == 2, f"expected 2 fibrils, got {len(out)}: {lengths}"
+    assert lengths[0] == pytest.approx(284, abs=30), lengths
+    assert lengths[1] == pytest.approx(400, abs=30), lengths
+
+
+def test_linking_off_leaves_the_crossing_fragmented():
+    """Control: without linking the same X yields four branch fragments."""
+    mask = np.zeros((400, 500), dtype=bool)
+    _draw(mask, (50, 200), (450, 200))
+    _draw(mask, (150, 80), (330, 300))
+
+    out = trace_centerlines(mask, min_branch_px=15, link_crossings=False)
+
+    assert len(out) == 4
+
+
+def test_single_fibril_is_untouched():
+    mask = np.zeros((200, 400), dtype=bool)
+    _draw(mask, (20, 100), (380, 100))
+
+    out = trace_centerlines(mask, min_branch_px=15, link_crossings=True)
+
+    assert len(out) == 1
+    assert _lengths(out)[0] == pytest.approx(360, abs=15)
