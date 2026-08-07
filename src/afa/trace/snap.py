@@ -55,9 +55,7 @@ class SnapResult:
     offsets:
         Per-vertex signed shift applied along the normal, in pixels.
     score_before, score_after:
-        Mean ridge response along the original and the snapped curve. The ratio
-        is the honest confidence signal: a trace that did not gain response has
-        probably not landed on a fibril and should be reviewed by hand.
+        Mean ridge response along the original and the snapped curve.
     """
 
     points: np.ndarray
@@ -67,8 +65,29 @@ class SnapResult:
 
     @property
     def gain(self) -> float:
-        """Multiplicative improvement in mean ridge response."""
+        """Multiplicative improvement in mean ridge response.
+
+        Necessary but nowhere near sufficient as a confidence signal, and it
+        must not be used as one on its own: it says the curve landed on *a*
+        ridge, not on the *right* one. A trace dragged wholesale onto a
+        neighbouring fibril scores an enormous gain while being entirely wrong.
+        Read it together with :attr:`offset_spread`.
+        """
         return self.score_after / self.score_before if self.score_before > 0 else float("inf")
+
+    @property
+    def offset_spread(self) -> float:
+        """Interquartile spread of the chosen offsets, in pixels.
+
+        The annotator drew each trace at a roughly constant offset, so a well
+        behaved snap keeps a narrow spread. A wide one means the curve changed
+        its mind along the way, which in this data means it crossed onto a
+        different fibril.
+        """
+        if self.offsets.size == 0:
+            return 0.0
+        q75, q25 = np.percentile(self.offsets, [75, 25])
+        return float(q75 - q25)
 
 
 def _unit_normals(points: np.ndarray) -> np.ndarray:
@@ -93,6 +112,7 @@ def _viterbi(
     offsets: np.ndarray,
     jump_penalty: float,
     anchor_penalty: float,
+    anchor: float = 0.0,
 ) -> np.ndarray:
     """Best offset index per vertex, maximizing score minus offset-change penalty.
 
@@ -100,10 +120,10 @@ def _viterbi(
     """
     n, k = scores.shape
     transition = -jump_penalty * np.abs(offsets[:, None] - offsets[None, :])  # (k, k)
-    # Prefer the smallest move that explains the ridge. Tiny by design: it only
-    # decides otherwise-flat cases, where the alternative is that the trace
-    # slides to the edge of the search band on no evidence at all.
-    scores = scores - anchor_penalty * np.abs(offsets)[None, :]
+    # Pull towards ``anchor``, the offset this trace is believed to have been
+    # drawn at. Without any such term a signal-free stretch has no preferred
+    # offset and slides to the edge of the search band.
+    scores = scores - anchor_penalty * np.abs(offsets - anchor)[None, :]
 
     best = scores[0].copy()
     back = np.empty((n, k), dtype=np.int32)
@@ -128,8 +148,9 @@ def snap_to_ridge(
     max_shift: float = 25.0,
     shift_step: float = 1.0,
     resample_step: float = 1.0,
-    jump_penalty: float = 0.1,
-    anchor_penalty: float = 1e-3,
+    jump_penalty: float = 0.3,
+    anchor_penalty: float = 0.01,
+    refine_anchor: bool = True,
     smooth_window: int = 9,
 ) -> SnapResult:
     """Move a drawn polyline onto the nearby fibril ridge.
@@ -155,9 +176,15 @@ def snap_to_ridge(
         keeps the snapped curve more rigidly parallel to the drawn one; lower
         lets it follow the ridge more freely.
     anchor_penalty:
-        Cost per pixel of absolute displacement from the drawn curve. Kept tiny
-        on purpose: without it, a stretch of image with no ridge signal has no
-        preferred offset and the trace slides to the edge of the search band.
+        Cost per pixel of departing from the anchor offset. Without it, a
+        stretch with no ridge signal has no preferred offset and the trace
+        slides to the edge of the search band; too large and it overrides the
+        ridge evidence entirely.
+    refine_anchor:
+        Re-run the optimization anchored on the trace's own median offset. This
+        is what lets ``anchor_penalty`` be large enough to stop the trace
+        wandering onto a neighbouring fibril without also cancelling the
+        genuine offset it was drawn at.
     smooth_window:
         Moving-average window applied to the snapped curve (odd, in vertices).
 
@@ -177,7 +204,23 @@ def snap_to_ridge(
     candidates = base[:, None, :] + offsets[None, :, None] * normals[:, None, :]
     scores = _sample(ridge, candidates)  # (n_vertices, n_offsets)
 
-    path = _viterbi(scores, offsets, jump_penalty, anchor_penalty)
+    # Pass 1 anchors on zero, which is only right in the absence of any better
+    # estimate. The annotator drew each trace at a roughly constant offset, so
+    # pass 2 re-anchors on that trace's own median: the prior becomes "stay
+    # parallel to how it was drawn", not "stay where it was drawn". Anchoring on
+    # zero with enough weight to stop the wandering also cancels the real ~10 px
+    # offset, which is the whole thing being corrected for.
+    if refine_anchor:
+        # Pass 1 uses a tie-breaking weight only, so the estimate of where the
+        # trace was drawn comes from the ridge rather than from the prior; using
+        # the full weight here would collapse the estimate to zero and pass 2
+        # would then merely confirm its own bias.
+        tie_break = min(anchor_penalty, 1e-3)
+        first = _viterbi(scores, offsets, jump_penalty, tie_break)
+        anchor = float(np.median(offsets[first]))
+        path = _viterbi(scores, offsets, jump_penalty, anchor_penalty, anchor=anchor)
+    else:
+        path = _viterbi(scores, offsets, jump_penalty, anchor_penalty)
     chosen = offsets[path]
     snapped = base + chosen[:, None] * normals
     snapped = smooth_polyline(snapped, window=smooth_window)
