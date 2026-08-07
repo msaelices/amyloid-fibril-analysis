@@ -1,0 +1,19 @@
+# Default pipeline configuration.
+# Override the pixel size only if the .mrc header is missing/incorrect.
+pixel_size_a: null          # Angstrom/pixel; null => read from MRC header
+
+detect:
+  method: classical         # classical | unet
+  invert: true              # fibrils are darker than background
+  sigmas: [1.0, 2.0, 3.0, 4.0]
+  prob_threshold: 0.2
+  unet_weights: null
+
+trace:
+  resample_step: 1.0        # pixels
+  smooth_window: 5          # odd number of points
+  min_branch_px: 15         # drop shorter skeleton branches (noise)
+  link_crossings: true
+  max_link_angle_deg: 35.0  # link branches only if roughly collinear
+
+bootstrap_ci: false         # image-level bootstrap for per-patient CIs

@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data & models -- never commit patient data or large binaries
+data/raw/**
+data/processed/**
+data/annotations/**
+models/**
+*.mrc
+*.tif
+*.tiff
+!**/.gitkeep
+!data/**/README.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Outputs
+outputs/
+*.log
