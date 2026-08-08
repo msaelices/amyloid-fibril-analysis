@@ -18,5 +18,6 @@ trace:
   merge_junction_px: 15.0   # collapse the two Y-nodes of an X into one
   bridge_gap_px: 60.0       # join fragments across a break in the mask (0 = off)
   bridge_angle_deg: 30.0    # collinearity required to bridge a gap
+  min_bridge_evidence: 0.25 # detector support required along the bridge
 
 bootstrap_ci: false         # image-level bootstrap for per-patient CIs

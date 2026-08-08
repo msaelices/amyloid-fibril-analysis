@@ -25,6 +25,7 @@ class TraceConfig:
     merge_junction_px: float = 15.0
     bridge_gap_px: float = 60.0
     bridge_angle_deg: float = 30.0
+    min_bridge_evidence: float = 0.25
 
 
 @dataclass
