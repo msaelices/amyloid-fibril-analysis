@@ -19,7 +19,7 @@ def synthetic_fibrils(shape=(512, 512), n=6, seed=0):
     rng = np.random.default_rng(seed)
     img = np.zeros(shape, dtype=np.float32)
     traces = []
-    for k in range(n):
+    for _ in range(n):
         # A gently curved fibril as a quadratic Bezier-ish arc.
         p0 = rng.uniform([40, 40], [shape[1] - 40, shape[0] - 40])
         p2 = rng.uniform([40, 40], [shape[1] - 40, shape[0] - 40])

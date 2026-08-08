@@ -13,13 +13,19 @@ jobs:
         python-version: ["3.10", "3.12"]
     steps:
       - uses: actions/checkout@v4
+      # setup-python provides an interpreter that is not externally managed, so
+      # `uv pip install --system` can write to it. `uv python install` alone does
+      # not: it installs a uv-managed Python that --system then ignores, and the
+      # install fails against the runner's PEP 668 system Python instead.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
       - name: Install uv
         uses: astral-sh/setup-uv@v3
-      - name: Set up Python
-        run: uv python install ${{ matrix.python-version }}
       - name: Install project (deterministic core only)
         run: uv pip install --system -e ".[dev]"
       - name: Lint
-        run: ruff check src tests
+        run: ruff check src tests scripts
       - name: Tests
         run: pytest --cov=afa

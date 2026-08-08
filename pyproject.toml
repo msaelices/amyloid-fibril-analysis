@@ -20,15 +20,20 @@ dependencies = [
     "typer>=0.12",
     "roifile>=2024.1.10",   # read ImageJ .roi / RoiSet.zip
     "tifffile>=2024.1.0",
+    "pillow>=10.0",         # used directly by afa.segment.dataset
 ]
 
 [project.optional-dependencies]
 # Learned segmentation (U-Net). Kept optional so the deterministic pipeline
 # installs with zero heavy ML deps.
+#
+# torch alone: the U-Net is implemented directly (afa.segment.torch_unet) rather
+# than via segmentation-models-pytorch, and augmentation is flips/rotations in
+# NumPy rather than albumentations. With a few dozen grayscale training images
+# whose texture statistics are nothing like ImageNet's, a pretrained backbone
+# buys little and costs a timm + torchvision dependency chain.
 dl = [
     "torch>=2.2",
-    "segmentation-models-pytorch>=0.3",
-    "albumentations>=1.4",
 ]
 dev = [
     "pytest>=8.0",
