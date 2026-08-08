@@ -43,6 +43,14 @@ The first three were recovered from `models/` after the fact and carry
 `"backfilled"`; their timestamps come from file mtime and the commits were
 identified from the branch history, so treat them as approximate.
 
+> **`unet` and `unet_long` must never be evaluated on the test split.** Both
+> predate the three-way split, and their 8 validation images are, image for
+> image, the 8 that are now the test set: `slide03, 04, 05, 22, 25, 27, 28, 35`.
+> Their checkpoints were selected on exactly those images, so any score they
+> get there is meaningless. `scripts/validate.py` cannot warn about this — it
+> only knows the split it computes itself, and to it those images are the test
+> set. `unet_v2` and the four sweep runs are clean.
+
 ## The pos_weight / schedule sweep
 
 Four 50-epoch runs, scored by `scripts/compare_runs.py` on the validation split.

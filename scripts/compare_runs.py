@@ -71,7 +71,11 @@ def main() -> None:
             {
                 "run": path.stem,
                 "pos_weight": report.get("args", {}).get("pos_weight", "?"),
-                "schedule": "no" if report.get("args", {}).get("no_schedule") == "True" else "yes",
+                "schedule": (
+                    "yes"
+                    if report.get("args", {}).get("cosine_schedule") == "True"
+                    else "no"
+                ),
                 "dice": sum(dices) / len(dices),
                 "coverage": sum(covs) / len(covs),
                 "recall": matched / total if total else float("nan"),
