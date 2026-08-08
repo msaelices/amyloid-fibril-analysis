@@ -101,6 +101,9 @@ def trace_and_measure(
         min_branch_px=config.trace.min_branch_px,
         link_crossings=config.trace.link_crossings,
         max_link_angle_deg=config.trace.max_link_angle_deg,
+        merge_junction_px=config.trace.merge_junction_px,
+        bridge_gap_px=config.trace.bridge_gap_px,
+        bridge_angle_deg=config.trace.bridge_angle_deg,
     )
     df = _rows_from_centerlines(
         centerlines,

@@ -21,7 +21,10 @@ class TraceConfig:
     smooth_window: int = 5
     min_branch_px: int = 15
     link_crossings: bool = True
-    max_link_angle_deg: float = 35.0
+    max_link_angle_deg: float = 60.0
+    merge_junction_px: float = 15.0
+    bridge_gap_px: float = 60.0
+    bridge_angle_deg: float = 30.0
 
 
 @dataclass
