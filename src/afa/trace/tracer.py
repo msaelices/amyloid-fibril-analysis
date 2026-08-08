@@ -50,8 +50,10 @@ def trace_centerlines(
     link_crossings: bool = True,
     max_link_angle_deg: float = 60.0,
     merge_junction_px: float = 15.0,
-    bridge_gap_px: float = 60.0,
+    bridge_gap_px: float = 0.0,
     bridge_angle_deg: float = 30.0,
+    evidence: np.ndarray | None = None,
+    min_bridge_evidence: float = 0.25,
 ) -> list[np.ndarray]:
     """Trace ordered centerlines from a binary fibril mask.
 
@@ -78,11 +80,17 @@ def trace_centerlines(
     bridge_gap_px:
         After junction linking, join fragments whose ends face each other across
         a gap of at most this many pixels (see :mod:`afa.trace.bridge`). Zero
-        disables it. Junction linking can only follow a fibril where the
-        skeleton is connected; on real data most chains end at a break in the
-        mask instead, which only this step can cross.
+        disables it, which is the default: without ``evidence`` the join rests
+        on geometry alone, and two different fibrils lying end to end on one
+        line satisfy every geometric test. The pipeline enables it and supplies
+        evidence; a bare call on a mask does not.
     bridge_angle_deg:
         Collinearity tolerance for that join.
+    evidence:
+        Detector output backing the mask (a probability map). Supplying it lets
+        the bridging step check that the image actually supports each join.
+    min_bridge_evidence:
+        Minimum mean ``evidence`` along a bridge for it to be made.
 
     Returns
     -------
@@ -150,10 +158,21 @@ def trace_centerlines(
     if bridge_gap_px > 0:
         from afa.trace.bridge import bridge_gaps
 
-        centerlines = bridge_gaps(
-            centerlines, max_gap_px=bridge_gap_px, max_angle_deg=bridge_angle_deg
+        centerlines, merged = bridge_gaps(
+            centerlines,
+            max_gap_px=bridge_gap_px,
+            max_angle_deg=bridge_angle_deg,
+            evidence=evidence,
+            min_evidence=min_bridge_evidence,
         )
-        centerlines = [_finish(c, resample_step, smooth_window) for c in centerlines]
+        # Only the joined chains need resampling and smoothing again. Running it
+        # over the untouched ones smooths them a second time, which leaves their
+        # length alone but roughly halves their curvature -- silently rescaling
+        # a reported metric for traces that were never bridged at all.
+        centerlines = [
+            _finish(c, resample_step, smooth_window) if was_merged else c
+            for c, was_merged in zip(centerlines, merged, strict=True)
+        ]
     return centerlines
 
 
@@ -194,9 +213,9 @@ def _finish(coords: np.ndarray, step: float, window: int) -> np.ndarray:
     return smooth_polyline(resample_polyline(coords, step=step), window=window)
 
 
-def _end_direction(branch: dict, at_start: bool, k: int = 6) -> np.ndarray:
+def _end_direction(branch: dict, at_start: bool, k: int = 5) -> np.ndarray:
     """Unit direction of a branch at one end, pointing AWAY from the node there."""
-    d = _branch_direction(branch["coords"], at_start=at_start)
+    d = _branch_direction(branch["coords"], at_start=at_start, k=k)
     return d if at_start else -d
 
 
@@ -278,7 +297,12 @@ def _link_and_finish(
                     continue  # a branch may not be joined to itself
                 cos_turn = float(-np.dot(dirs[a], dirs[b]))
                 if cos_turn >= min_cos:
-                    quality[(a, b)] = cos_turn
+                    # Normalized so an admissible pair scores in (0, 1]: 1 for a
+                    # perfectly straight continuation, ~0 at the angle limit.
+                    # Raw cosines would let two marginal links outscore one
+                    # straight one, and would go negative past 90 degrees, where
+                    # the empty matching then wins and linking silently stops.
+                    quality[(a, b)] = (cos_turn - min_cos) / max(1.0 - min_cos, 1e-9)
         for a, b in _best_matching(quality, ends):
             partner[a] = b
             partner[b] = a

@@ -105,3 +105,54 @@ def test_single_fibril_is_untouched():
 
     assert len(out) == 1
     assert _lengths(out)[0] == pytest.approx(360, abs=15)
+
+
+def test_bridging_does_not_resmooth_untouched_centerlines():
+    """Enabling bridging must not change traces that were never bridged.
+
+    _finish was being re-applied to the whole list, which leaves length alone but
+    roughly halves curvature -- silently rescaling a reported metric.
+    """
+    from afa.morphology.metrics import compute_metrics
+
+    mask = np.zeros((300, 500), dtype=bool)
+    _draw(mask, (40, 60), (300, 240))
+    _draw(mask, (60, 250), (460, 160))
+
+    off = trace_centerlines(mask, min_branch_px=20, bridge_gap_px=0.0)
+    # A tolerance at which no join is geometrically possible.
+    on = trace_centerlines(mask, min_branch_px=20, bridge_gap_px=1e-9)
+
+    assert len(off) == len(on)
+    for a, b in zip(sorted(off, key=len), sorted(on, key=len), strict=True):
+        ma, mb = compute_metrics(a), compute_metrics(b)
+        assert ma.length == pytest.approx(mb.length, rel=1e-6)
+        assert ma.max_curvature == pytest.approx(mb.max_curvature, rel=1e-6)
+        assert ma.total_abs_turning == pytest.approx(mb.total_abs_turning, rel=1e-6)
+
+
+def test_a_wide_angle_tolerance_loosens_linking_instead_of_disabling_it():
+    """Past 90 degrees the raw cosine goes negative and the empty matching won."""
+    from afa.trace.tracer import _best_matching
+
+    # Four ends meeting at 110 degrees, well inside a 120 degree tolerance.
+    min_cos = float(np.cos(np.deg2rad(120.0)))
+    cos_turn = float(np.cos(np.deg2rad(110.0)))
+    weight = (cos_turn - min_cos) / (1.0 - min_cos)
+    quality = {(0, 2): weight, (4, 6): weight}
+
+    assert weight > 0
+    assert len(_best_matching(quality, [0, 2, 4, 6])) == 2
+
+
+def test_one_straight_continuation_beats_two_marginal_ones():
+    """Summed raw cosines let two links at the limit outscore a straight one."""
+    from afa.trace.tracer import _best_matching
+
+    min_cos = float(np.cos(np.deg2rad(60.0)))
+    def w(turn_deg):
+        return (float(np.cos(np.deg2rad(turn_deg))) - min_cos) / (1.0 - min_cos)
+
+    quality = {(0, 2): w(1.0), (0, 4): w(59.0), (2, 6): w(59.0)}
+
+    assert _best_matching(quality, [0, 2, 4, 6]) == [(0, 2)]
