@@ -48,8 +48,10 @@ def trace_centerlines(
     smooth_window: int = 5,
     min_branch_px: int = 10,
     link_crossings: bool = True,
-    max_link_angle_deg: float = 35.0,
+    max_link_angle_deg: float = 60.0,
     merge_junction_px: float = 15.0,
+    bridge_gap_px: float = 60.0,
+    bridge_angle_deg: float = 30.0,
 ) -> list[np.ndarray]:
     """Trace ordered centerlines from a binary fibril mask.
 
@@ -73,6 +75,14 @@ def trace_centerlines(
     max_link_angle_deg:
         Two branches at a junction are linked only if the turn between them is
         below this angle (i.e. they are roughly collinear).
+    bridge_gap_px:
+        After junction linking, join fragments whose ends face each other across
+        a gap of at most this many pixels (see :mod:`afa.trace.bridge`). Zero
+        disables it. Junction linking can only follow a fibril where the
+        skeleton is connected; on real data most chains end at a break in the
+        mask instead, which only this step can cross.
+    bridge_angle_deg:
+        Collinearity tolerance for that join.
 
     Returns
     -------
@@ -130,10 +140,21 @@ def trace_centerlines(
     if not branches:
         return []
 
-    if not link_crossings:
-        return [_finish(b["coords"], resample_step, smooth_window) for b in branches]
+    if link_crossings:
+        centerlines = _link_and_finish(
+            branches, resample_step, smooth_window, max_link_angle_deg
+        )
+    else:
+        centerlines = [_finish(b["coords"], resample_step, smooth_window) for b in branches]
 
-    return _link_and_finish(branches, resample_step, smooth_window, max_link_angle_deg)
+    if bridge_gap_px > 0:
+        from afa.trace.bridge import bridge_gaps
+
+        centerlines = bridge_gaps(
+            centerlines, max_gap_px=bridge_gap_px, max_angle_deg=bridge_angle_deg
+        )
+        centerlines = [_finish(c, resample_step, smooth_window) for c in centerlines]
+    return centerlines
 
 
 def _merge_close_junctions(raw: list[dict], merge_junction_px: float) -> dict[int, int]:
@@ -173,84 +194,128 @@ def _finish(coords: np.ndarray, step: float, window: int) -> np.ndarray:
     return smooth_polyline(resample_polyline(coords, step=step), window=window)
 
 
+def _end_direction(branch: dict, at_start: bool, k: int = 6) -> np.ndarray:
+    """Unit direction of a branch at one end, pointing AWAY from the node there."""
+    d = _branch_direction(branch["coords"], at_start=at_start)
+    return d if at_start else -d
+
+
+def _best_matching(quality: dict[tuple[int, int], float], ends: list[int]) -> list[tuple[int, int]]:
+    """Maximum-weight pairing of branch ends meeting at one node.
+
+    Exhaustive for the degrees that occur in practice (3 to 6 branches at a
+    crossing), greedy above that. Junction degree is tiny, so the exhaustive
+    search is cheap and removes the ordering sensitivity that made the greedy
+    walk's result depend on which branch it happened to start from.
+    """
+    if len(ends) > 8:
+        chosen, used = [], set()
+        for (a, b), _ in sorted(quality.items(), key=lambda kv: -kv[1]):
+            if a not in used and b not in used:
+                chosen.append((a, b))
+                used |= {a, b}
+        return chosen
+
+    best_score, best_pairs = 0.0, []
+
+    def recurse(remaining: tuple[int, ...], pairs: list, score: float) -> None:
+        nonlocal best_score, best_pairs
+        if score > best_score:
+            best_score, best_pairs = score, list(pairs)
+        if len(remaining) < 2:
+            return
+        head, rest = remaining[0], remaining[1:]
+        # Either leave `head` unpaired (a chain terminates here) ...
+        recurse(rest, pairs, score)
+        # ... or pair it with any admissible partner.
+        for i, other in enumerate(rest):
+            key = (head, other) if head < other else (other, head)
+            if key in quality:
+                pairs.append(key)
+                recurse(rest[:i] + rest[i + 1:], pairs, score + quality[key])
+                pairs.pop()
+
+    recurse(tuple(ends), [], 0.0)
+    return best_pairs
+
+
 def _link_and_finish(
     branches: list[dict],
     step: float,
     window: int,
     max_link_angle_deg: float,
 ) -> list[np.ndarray]:
-    """Greedily chain branches that share a node and continue smoothly.
+    """Chain branches by pairing their ends optimally at each junction.
 
-    Convention that makes the angle test work: ``ref_dir`` and ``cdir`` both
-    point *away* from the shared junction. Two branches that continue each other
-    straight through are then antiparallel, so ``dot(ref_dir, -cdir) == 1`` and a
-    turn of ``theta`` degrees gives ``cos(theta)``. The acceptance threshold is
-    therefore ``cos(max_link_angle_deg)``.
+    Convention that makes the angle test work: every direction points *away*
+    from the shared node, so two branches continuing each other straight are
+    antiparallel and ``-dot(a, b)`` is the cosine of the turn. A pair is
+    admissible when that exceeds ``cos(max_link_angle_deg)``.
+
+    The pairing is solved per node rather than walked greedily. A fibril
+    crossing a dense field has to win a decision at every junction it passes,
+    and under a greedy walk the winner depends on which branch the iteration
+    started from, so a fibril could lose a crossing to a branch that merely got
+    there first.
     """
-    max_cos = np.cos(np.deg2rad(max_link_angle_deg))  # near +1 for a small turn
+    min_cos = float(np.cos(np.deg2rad(max_link_angle_deg)))
 
-    # Index branches by the nodes they touch.
+    # Every branch has two ends; end 2i is branch i's start, 2i+1 its end.
     by_node: dict[int, list[int]] = defaultdict(list)
     for idx, b in enumerate(branches):
-        by_node[b["src"]].append(idx)
-        by_node[b["dst"]].append(idx)
+        by_node[b["src"]].append(2 * idx)
+        by_node[b["dst"]].append(2 * idx + 1)
 
-    centerlines: list[np.ndarray] = []
-
-    for start in branches:
-        if start["used"]:
+    partner: dict[int, int] = {}
+    for ends in by_node.values():
+        if len(ends) < 2:
             continue
-        start["used"] = True
-        chain = list(start["coords"])
-        # Extend from the destination end forward.
-        _extend(chain, start, "dst", branches, by_node, max_cos, forward=True)
-        # Extend from the source end backward.
-        _extend(chain, start, "src", branches, by_node, max_cos, forward=False)
-        centerlines.append(_finish(np.asarray(chain), step, window))
+        dirs = {e: _end_direction(branches[e // 2], at_start=(e % 2 == 0)) for e in ends}
+        quality = {}
+        for i, a in enumerate(ends):
+            for b in ends[i + 1:]:
+                if a // 2 == b // 2:
+                    continue  # a branch may not be joined to itself
+                cos_turn = float(-np.dot(dirs[a], dirs[b]))
+                if cos_turn >= min_cos:
+                    quality[(a, b)] = cos_turn
+        for a, b in _best_matching(quality, ends):
+            partner[a] = b
+            partner[b] = a
+
+    # Walk the pairings to build chains. Start from unpaired ends first so that
+    # open fibrils come out whole; whatever remains is a closed loop.
+    centerlines: list[np.ndarray] = []
+    visited: set[int] = set()
+
+    def walk(start_end: int) -> list[np.ndarray]:
+        pieces, end = [], start_end
+        while True:
+            branch = end // 2
+            if branch in visited:
+                break
+            visited.add(branch)
+            coords = branches[branch]["coords"]
+            pieces.append(coords if end % 2 == 0 else coords[::-1])
+            far = branch * 2 + (1 if end % 2 == 0 else 0)
+            nxt = partner.get(far)
+            if nxt is None:
+                break
+            end = nxt
+        return pieces
+
+    for e in range(2 * len(branches)):
+        if e in partner or e // 2 in visited:
+            continue
+        pieces = walk(e)
+        if pieces:
+            centerlines.append(_finish(np.vstack(pieces), step, window))
+
+    for idx in range(len(branches)):
+        if idx in visited:
+            continue
+        pieces = walk(2 * idx)
+        if pieces:
+            centerlines.append(_finish(np.vstack(pieces), step, window))
 
     return centerlines
-
-
-def _extend(chain, current, node_key, branches, by_node, max_cos, *, forward):
-    """Walk from ``current`` branch across a junction, appending collinear branches."""
-    while True:
-        node = current[node_key]
-        candidates = [j for j in by_node[node] if not branches[j]["used"]]
-        if not candidates:
-            return
-        # Direction of the current chain at the node, pointing AWAY from it so
-        # that it is directly comparable with the candidates' directions.
-        tail = np.asarray(chain[-5:] if forward else chain[:5])
-        ref_dir = _branch_direction(tail, at_start=not forward)
-        if forward:
-            ref_dir = -ref_dir
-
-        best, best_cos, best_at_start = None, -2.0, False
-        for j in candidates:
-            cand = branches[j]
-            at_start = cand["src"] == node
-            cdir = _branch_direction(cand["coords"], at_start=at_start)
-            if not at_start:
-                # The branch meets the node by its far end, so that direction
-                # points into the node; flip it to point away like the others.
-                cdir = -cdir
-            # Both vectors now point away from the node, so a straight
-            # continuation is antiparallel and this is the cosine of the turn.
-            cos = float(np.dot(ref_dir, -cdir))
-            if cos > best_cos:
-                best, best_cos, best_at_start = j, cos, at_start
-        if best is None or best_cos < max_cos:
-            return
-
-        cand = branches[best]
-        cand["used"] = True
-        seg = cand["coords"] if best_at_start else cand["coords"][::-1]
-        if forward:
-            chain.extend(seg[1:])
-        else:
-            for p in seg[1:]:
-                chain.insert(0, p)
-        # Continue from the far end of the appended branch.
-        current = {"src": cand["dst"] if best_at_start else cand["src"],
-                   "dst": cand["src"] if best_at_start else cand["dst"]}
-        node_key = "dst" if forward else "src"

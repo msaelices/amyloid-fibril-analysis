@@ -65,14 +65,36 @@ def test_crossing_fibrils_are_followed_through():
 
 
 def test_linking_off_leaves_the_crossing_fragmented():
-    """Control: without linking the same X yields four branch fragments."""
+    """Control: without linking the same X yields four branch fragments.
+
+    Gap bridging is disabled too. It is a separate step that joins collinear
+    fragments without needing the skeleton to be connected, so with it on the
+    two halves of a fibril are rejoined even when junction linking is off, and
+    this control would not measure what it means to.
+    """
     mask = np.zeros((400, 500), dtype=bool)
     _draw(mask, (50, 200), (450, 200))
     _draw(mask, (150, 80), (330, 300))
 
-    out = trace_centerlines(mask, min_branch_px=15, link_crossings=False)
+    out = trace_centerlines(
+        mask, min_branch_px=15, link_crossings=False, bridge_gap_px=0.0
+    )
 
     assert len(out) == 4
+
+
+def test_bridging_rejoins_a_fibril_the_mask_breaks_in_two():
+    """A break in the mask disconnects the skeleton; only bridging can cross it."""
+    mask = np.zeros((200, 500), dtype=bool)
+    _draw(mask, (40, 100), (230, 100))
+    _draw(mask, (270, 100), (460, 100))   # same fibril, 40 px of it missing
+
+    without = trace_centerlines(mask, min_branch_px=15, bridge_gap_px=0.0)
+    with_bridge = trace_centerlines(mask, min_branch_px=15, bridge_gap_px=60.0)
+
+    assert len(without) == 2
+    assert len(with_bridge) == 1
+    assert _lengths(with_bridge)[0] == pytest.approx(420, abs=25)
 
 
 def test_single_fibril_is_untouched():
