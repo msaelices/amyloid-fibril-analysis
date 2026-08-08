@@ -8,13 +8,65 @@ Expects ``<data>/images/<id>.png`` and ``<data>/traces/<id>.csv`` (columns
 ``filament_id,x,y``). Traces are snapped onto the fibril ridge and rasterized
 into masks; unannotated ridge-like pixels are marked ignore rather than
 background (see :mod:`afa.segment.dataset` for why).
+
+Weights go to ``models/`` which is gitignored, but the run report goes to
+``reports/`` which is tracked: losses, split ids, hyperparameters and the commit
+that produced them are the record of what was tried, and they contain no patient
+data. ``reports/training_runs.jsonl`` accumulates one line per run.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
+
+# Summary fields appended to the run log. The per-epoch curves stay in the
+# individual report; this is the one-line-per-run history.
+SUMMARY_FIELDS = (
+    "run",
+    "finished_at",
+    "commit",
+    "best_val_loss",
+    "best_epoch",
+    "final_train_loss",
+    "final_val_loss",
+    "n_train_patches",
+    "n_val_patches",
+    "n_fibrils",
+)
+
+
+def _git_commit() -> str | None:
+    """Short SHA of the code that produced the run, so a result is traceable."""
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, check=True, timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out.stdout.strip() or None
+
+
+def write_report(report: dict, reports_dir: Path) -> None:
+    """Write the full report, and append a summary line to the run log.
+
+    Two files on purpose. The per-run JSON holds the epoch-by-epoch curves and
+    is overwritten when a run of the same name is repeated. The JSONL is only
+    ever appended to, so the record of what was tried survives re-runs -- which
+    is the part that was previously lost, since reports lived under models/ and
+    that directory is not tracked.
+    """
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    (reports_dir / f"{report['run']}.json").write_text(json.dumps(report, indent=2))
+
+    summary = {k: report.get(k) for k in SUMMARY_FIELDS}
+    summary["args"] = report.get("args", {})
+    with open(reports_dir / "training_runs.jsonl", "a") as fh:
+        fh.write(json.dumps(summary) + "\n")
 
 
 def main() -> None:
@@ -31,10 +83,16 @@ def main() -> None:
     ap.add_argument("--base", type=int, default=16, help="U-Net base width")
     ap.add_argument("--depth", type=int, default=4)
     ap.add_argument("--lr", type=float, default=3e-4)
+    ap.add_argument("--pos-weight", type=float, default=10.0,
+                    help="BCE weight on fibril pixels; changes the loss scale")
+    ap.add_argument("--cosine-schedule", action="store_true",
+                    help="anneal the learning rate; measured worse here, see reports/README.md")
     ap.add_argument("--width-px", type=int, default=7, help="rasterized fibril width")
     ap.add_argument("--no-snap", action="store_true", help="traces already centered")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--cache", type=Path, default=Path("data/dataset/cache"))
+    ap.add_argument("--reports", type=Path, default=Path("reports"),
+                    help="tracked directory for run reports (weights stay in models/)")
     ap.add_argument("--device", default=None)
     args = ap.parse_args()
 
@@ -91,24 +149,35 @@ def main() -> None:
         lr=args.lr,
         base=args.base,
         depth=args.depth,
+        pos_weight=args.pos_weight,
+        cosine_schedule=args.cosine_schedule,
         device=args.device,
         seed=args.seed,
     )
 
     report = {
+        "run": args.out.stem,
+        "finished_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "commit": _git_commit(),
         "train_ids": train_ids,
         "val_ids": val_ids,
         "test_ids": test_ids,
         "best_val_loss": history.best_val,
         "best_epoch": history.best_epoch,
+        "final_train_loss": history.train_loss[-1] if history.train_loss else None,
+        "final_val_loss": history.val_loss[-1] if history.val_loss else None,
+        "n_train_patches": len(train_ds),
+        "n_val_patches": len(val_ds),
+        "n_fibrils": total_fibrils,
         "train_loss": history.train_loss,
         "val_loss": history.val_loss,
         "args": {k: str(v) for k, v in vars(args).items()},
     }
-    report_path = Path(args.out).with_suffix(".json")
-    report_path.write_text(json.dumps(report, indent=2))
+    write_report(report, args.reports)
     print(f"\nbest val loss {history.best_val:.4f} at epoch {history.best_epoch + 1}")
-    print(f"weights -> {args.out}\nreport  -> {report_path}")
+    print(f"weights -> {args.out}")
+    print(f"report  -> {args.reports / (report['run'] + '.json')}")
+    print(f"history -> {args.reports / 'training_runs.jsonl'}")
 
 
 if __name__ == "__main__":

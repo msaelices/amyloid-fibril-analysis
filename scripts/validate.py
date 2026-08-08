@@ -38,6 +38,8 @@ def main() -> None:
     ap.add_argument("--threshold", type=float, default=0.5)
     ap.add_argument("--width-px", type=int, default=7)
     ap.add_argument("--match-distance", type=float, default=15.0)
+    ap.add_argument("--bridge-gap-px", type=float, default=60.0,
+                    help="join fragments across gaps this long, checked against the map")
     ap.add_argument("--coverage-tolerance", type=float, default=6.0,
                     help="px from a manual centerline still counted as covered")
     ap.add_argument("--pixel-size-nm", type=float, default=1.0,
@@ -99,7 +101,12 @@ def main() -> None:
         # Score only where the manual label is defined: unannotated fibrils are
         # unknown, not background, so counting them as errors is meaningless.
         valid = ~item.ignore
-        predicted = trace_centerlines(pred_mask, min_branch_px=20)
+        predicted = trace_centerlines(
+            pred_mask,
+            min_branch_px=20,
+            bridge_gap_px=args.bridge_gap_px,
+            evidence=prob,
+        )
         match = match_traces(predicted, item.centerlines, max_distance=args.match_distance)
 
         cover = coverage_report(item.centerlines, predicted, tolerance=args.coverage_tolerance)

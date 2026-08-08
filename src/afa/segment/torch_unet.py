@@ -82,6 +82,10 @@ def masked_dice_bce(
     ``pos_weight`` compensates the heavy class imbalance: fibrils occupy a low
     single-digit percentage of the pixels, so unweighted BCE is minimized by
     predicting background everywhere.
+
+    Note for anyone comparing runs: changing ``pos_weight`` changes the loss
+    function, so the resulting loss values are on different scales and cannot be
+    ranked against each other. Compare such runs on a fixed downstream metric.
     """
     bce = nn.functional.binary_cross_entropy_with_logits(
         logits, target, reduction="none", pos_weight=torch.tensor(pos_weight, device=logits.device)
@@ -115,16 +119,32 @@ def train(
     lr: float = 3e-4,
     base: int = 16,
     depth: int = 4,
+    pos_weight: float = 10.0,
+    cosine_schedule: bool = False,
     device: str | None = None,
     num_workers: int = 0,
     seed: int = 0,
     log: bool = True,
 ) -> TrainHistory:
-    """Train a U-Net and save the best-validation weights to ``out_path``."""
+    """Train a U-Net and save the best-validation weights to ``out_path``.
+
+    ``cosine_schedule`` anneals the learning rate to zero over the run. Off by
+    default despite being the more principled choice, because measurement did
+    not support it: on the held-out split it bought one extra matched fibril and
+    0.06 coverage while doubling the median tortuosity error and producing two
+    traces that wandered between fibrils (predicted tortuosity 2.5 against a
+    true 1.0). Tortuosity is currently the only descriptor valid without a pixel
+    size, so that is a bad trade here. See reports/README.md.
+    """
     torch.manual_seed(seed)
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     model = UNet(base=base, depth=depth).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+    scheduler = (
+        torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max(epochs, 1))
+        if cosine_schedule
+        else None
+    )
 
     train_loader = DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, drop_last=False
@@ -141,7 +161,7 @@ def train(
         for image, mask, weight in train_loader:
             image, mask, weight = image.to(device), mask.to(device), weight.to(device)
             optimizer.zero_grad()
-            loss = masked_dice_bce(model(image), mask, weight)
+            loss = masked_dice_bce(model(image), mask, weight, pos_weight=pos_weight)
             loss.backward()
             optimizer.step()
             losses.append(float(loss.detach()))
@@ -152,9 +172,13 @@ def train(
         with torch.no_grad():
             for image, mask, weight in val_loader:
                 image, mask, weight = image.to(device), mask.to(device), weight.to(device)
-                val_losses.append(float(masked_dice_bce(model(image), mask, weight)))
+                val_losses.append(
+                    float(masked_dice_bce(model(image), mask, weight, pos_weight=pos_weight))
+                )
         val = float(np.mean(val_losses)) if val_losses else float("nan")
         history.val_loss.append(val)
+        if scheduler is not None:
+            scheduler.step()
 
         if val < history.best_val:
             history.best_val = val

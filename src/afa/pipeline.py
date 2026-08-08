@@ -101,6 +101,14 @@ def trace_and_measure(
         min_branch_px=config.trace.min_branch_px,
         link_crossings=config.trace.link_crossings,
         max_link_angle_deg=config.trace.max_link_angle_deg,
+        merge_junction_px=config.trace.merge_junction_px,
+        bridge_gap_px=config.trace.bridge_gap_px,
+        bridge_angle_deg=config.trace.bridge_angle_deg,
+        # The detector's own map, so a bridge is only made where the image
+        # supports it. Geometry alone cannot tell a break inside one fibril from
+        # the space between two fibrils that happen to be collinear.
+        evidence=prob,
+        min_bridge_evidence=config.trace.min_bridge_evidence,
     )
     df = _rows_from_centerlines(
         centerlines,

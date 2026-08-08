@@ -1,0 +1,42 @@
+[
+  {
+    "run": "sweep_pw10",
+    "pos_weight": "10.0",
+    "schedule": "yes",
+    "dice": 0.4038788694250589,
+    "coverage": 0.7934129270499688,
+    "recall": 0.3181818181818182,
+    "objects": 116.5,
+    "best_val_loss": 1.022493805204119
+  },
+  {
+    "run": "sweep_pw30",
+    "pos_weight": "30.0",
+    "schedule": "yes",
+    "dice": 0.34105597014838485,
+    "coverage": 0.7719738191665714,
+    "recall": 0.18181818181818182,
+    "objects": 132.25,
+    "best_val_loss": 1.1591962235314506
+  },
+  {
+    "run": "sweep_pw10_nosched",
+    "pos_weight": "10.0",
+    "schedule": "no",
+    "dice": 0.4589621077110295,
+    "coverage": 0.7465659546422063,
+    "recall": 0.18181818181818182,
+    "objects": 90.75,
+    "best_val_loss": 0.8619454034737178
+  },
+  {
+    "run": "sweep_pw3",
+    "pos_weight": "3.0",
+    "schedule": "yes",
+    "dice": 0.46902822099814767,
+    "coverage": 0.6865339649030119,
+    "recall": 0.18181818181818182,
+    "objects": 112.5,
+    "best_val_loss": 0.9383835792541504
+  }
+]
