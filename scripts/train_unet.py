@@ -83,6 +83,10 @@ def main() -> None:
     ap.add_argument("--base", type=int, default=16, help="U-Net base width")
     ap.add_argument("--depth", type=int, default=4)
     ap.add_argument("--lr", type=float, default=3e-4)
+    ap.add_argument("--pos-weight", type=float, default=10.0,
+                    help="BCE weight on fibril pixels; changes the loss scale")
+    ap.add_argument("--no-schedule", action="store_true",
+                    help="constant learning rate instead of cosine annealing")
     ap.add_argument("--width-px", type=int, default=7, help="rasterized fibril width")
     ap.add_argument("--no-snap", action="store_true", help="traces already centered")
     ap.add_argument("--seed", type=int, default=0)
@@ -145,6 +149,8 @@ def main() -> None:
         lr=args.lr,
         base=args.base,
         depth=args.depth,
+        pos_weight=args.pos_weight,
+        cosine_schedule=not args.no_schedule,
         device=args.device,
         seed=args.seed,
     )
