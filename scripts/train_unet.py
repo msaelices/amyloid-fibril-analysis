@@ -85,8 +85,8 @@ def main() -> None:
     ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--pos-weight", type=float, default=10.0,
                     help="BCE weight on fibril pixels; changes the loss scale")
-    ap.add_argument("--no-schedule", action="store_true",
-                    help="constant learning rate instead of cosine annealing")
+    ap.add_argument("--cosine-schedule", action="store_true",
+                    help="anneal the learning rate; measured worse here, see reports/README.md")
     ap.add_argument("--width-px", type=int, default=7, help="rasterized fibril width")
     ap.add_argument("--no-snap", action="store_true", help="traces already centered")
     ap.add_argument("--seed", type=int, default=0)
@@ -150,7 +150,7 @@ def main() -> None:
         base=args.base,
         depth=args.depth,
         pos_weight=args.pos_weight,
-        cosine_schedule=not args.no_schedule,
+        cosine_schedule=args.cosine_schedule,
         device=args.device,
         seed=args.seed,
     )

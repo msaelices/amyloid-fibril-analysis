@@ -120,7 +120,7 @@ def train(
     base: int = 16,
     depth: int = 4,
     pos_weight: float = 10.0,
-    cosine_schedule: bool = True,
+    cosine_schedule: bool = False,
     device: str | None = None,
     num_workers: int = 0,
     seed: int = 0,
@@ -128,9 +128,13 @@ def train(
 ) -> TrainHistory:
     """Train a U-Net and save the best-validation weights to ``out_path``.
 
-    ``cosine_schedule`` anneals the learning rate to zero over the run. With a
-    constant rate the loss bounces around late in training and the best epoch is
-    partly luck about where it happened to land.
+    ``cosine_schedule`` anneals the learning rate to zero over the run. Off by
+    default despite being the more principled choice, because measurement did
+    not support it: on the held-out split it bought one extra matched fibril and
+    0.06 coverage while doubling the median tortuosity error and producing two
+    traces that wandered between fibrils (predicted tortuosity 2.5 against a
+    true 1.0). Tortuosity is currently the only descriptor valid without a pixel
+    size, so that is a bad trade here. See reports/README.md.
     """
     torch.manual_seed(seed)
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
