@@ -23,9 +23,15 @@ For every traced fibril (an ordered centerline resampled to physical units):
 | `total_abs_turning_per_nm` | ∫\|dθ\| / length — turning normalized by length. |
 | `local_dir_change_per_nm` | Local direction change per unit length (mean \|Δθ\|/Δs). |
 
-All physical units come from the pixel size stored in the `.mrc` header
-(overridable). Curvature is computed on a smoothed, arc-length-resampled
-centerline because raw pixel discretization makes curvature noisy.
+Physical units come from the pixel size in the `.mrc` header (overridable).
+Curvature is computed on a smoothed, arc-length-resampled centerline, because raw
+pixel discretization makes curvature noisy.
+
+> **On the current annotation batch there is no pixel size**, because the
+> annotated images are screenshots rather than micrographs, so lengths and
+> curvature come out in screen pixels. `tortuosity` and `total_abs_turning` are
+> dimensionless and exact regardless, and ratios between patients are valid for
+> every metric. See issue #4.
 
 ## Outputs
 
@@ -41,19 +47,22 @@ centerline because raw pixel discretization makes curvature noisy.
 Reading `.mrc` and computing the metrics is the easy, deterministic part. The
 hard part is **finding the fibrils** in low-SNR micrographs with crossings.
 
-- **Detection.** A classical vesselness/ridge filter (`segment/classical.py`)
-  gives a zero-training baseline. Because you already have ~20-30 manually
-  traced images, the recommended path is a small **U-Net** trained on masks
-  rasterized from those traces (`segment/unet.py`), which learns to ignore
-  background noise far better than any fixed threshold.
+- **Detection.** A classical vesselness filter (`segment/classical.py`) is the
+  zero-training baseline, and it is weak here: it covers 0.14 of the manual
+  fibril length against **0.78** for the trained U-Net
+  (`segment/torch_unet.py`). The learned detector is the one to use.
+- **Annotation.** The manual traces were drawn *beside* each fibril rather than
+  on it, so they are snapped onto the ridge before use (`trace/snap.py`). Only a
+  few fibrils per image were traced, so unlabelled pixels are treated as unknown
+  rather than as background.
 - **Tracing.** The probability map is skeletonized and turned into a graph;
-  junctions (fibril crossings) are resolved by **orientation continuity** — at a
-  4-way crossing, opposite branches with the smoothest direction are linked
-  (`trace/tracer.py`).
-- **Validation.** Automatic traces are matched against your manual ground truth
-  to report length/tortuosity error and pixel-level overlap. Expect a
+  branch ends are paired per junction by collinearity, crossing bridges are
+  collapsed, and fragments are joined across gaps **only where the detector's
+  map supports it** (`trace/tracer.py`, `trace/bridge.py`).
+- **Validation.** Dice at pixel level, one-to-one matching plus coverage at
+  fibril level, and per-metric morphology error (`validate.py`). Expect a
   **semi-automatic** workflow for publication quality: the model proposes, you
-  confirm/split at ambiguous crossings.
+  confirm at ambiguous crossings.
 
 ## New to this code? Read in this order
 
@@ -123,10 +132,27 @@ afa summarize outputs/per_image.csv --out outputs/per_patient.csv
 
 ## Status
 
-Deterministic core (io, metrics, stats, viz) and the classical tracing baseline
-are implemented and tested. The U-Net trainer is a documented interface ready to
-be filled in once a sample `.mrc` + its traces are available. This is an early
-scaffold — see the issues / `docs/approach.md` for the roadmap.
+The whole pipeline runs end to end: annotation import, trace snapping, U-Net
+training and tiled inference, tracing, metrics, per-patient statistics and a
+validation harness. 78 tests, CI green.
+
+Measured on 8 held-out images (20 manual fibrils), against the classical
+baseline:
+
+| | classical | U-Net |
+| --- | --- | --- |
+| Coverage of manual fibrils | 0.14 | **0.78** |
+| One-to-one recall | 0/20 | 7/20 |
+| Length error on matched fibrils | — | 19% |
+
+Two things to keep in mind when reading those numbers. **Detection works;
+tracing is the remaining problem** — 92 objects are produced per image where 1
+to 8 were traced. And **20 fibrils cannot establish much**: the recall
+difference is not statistically significant (`docs/traps.md` §5).
+
+The largest single blocker is not code. Without the original `.mrc` files there
+is no pixel size, so five of the seven descriptors are in screen pixels rather
+than nm (issue #4). See the [open issues](../../issues) for the rest.
 
 ## License
 
