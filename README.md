@@ -5,9 +5,8 @@ Automatic tracing and morphological analysis of amyloid fibrils in cryo-EM
 
 Given noisy 2D cryo-EM micrographs, the pipeline detects and traces individual
 fibrils, then computes per-fibril morphology descriptors and aggregates them per
-patient. It ships with a **deterministic classical baseline** that runs with no
-training, and a clean interface for a **learned (U-Net) segmenter** trained from
-your existing manual traces.
+patient. A **deterministic classical baseline** runs with no training; a
+**U-Net** trained from your existing manual traces does the job properly.
 
 ## What it computes
 
@@ -47,45 +46,33 @@ pixel discretization makes curvature noisy.
 Reading `.mrc` and computing the metrics is the easy, deterministic part. The
 hard part is **finding the fibrils** in low-SNR micrographs with crossings.
 
-- **Detection.** A classical vesselness filter (`segment/classical.py`) is the
-  zero-training baseline, and it is weak here: it covers 0.14 of the manual
-  fibril length against **0.78** for the trained U-Net
-  (`segment/torch_unet.py`). The learned detector is the one to use.
-- **Annotation.** The manual traces were drawn *beside* each fibril rather than
-  on it, so they are snapped onto the ridge before use (`trace/snap.py`). Only a
-  few fibrils per image were traced, so unlabelled pixels are treated as unknown
-  rather than as background.
-- **Tracing.** The probability map is skeletonized and turned into a graph;
-  branch ends are paired per junction by collinearity, crossing bridges are
-  collapsed, and fragments are joined across gaps **only where the detector's
-  map supports it** (`trace/tracer.py`, `trace/bridge.py`).
-- **Validation.** Dice at pixel level, one-to-one matching plus coverage at
-  fibril level, and per-metric morphology error (`validate.py`). Expect a
-  **semi-automatic** workflow for publication quality: the model proposes, you
-  confirm at ambiguous crossings.
+- **Detection.** The classical vesselness baseline is weak here: coverage 0.14
+  against **0.78** for the trained U-Net. Use the learned detector.
+- **Annotation.** The manual traces were drawn *beside* each fibril, so they are
+  snapped onto the ridge first (`trace/snap.py`). Only a few fibrils per image
+  were traced, so unlabelled pixels are treated as unknown, not background.
+- **Tracing.** Skeletonize, pair branch ends per junction by collinearity,
+  collapse crossing bridges, and join fragments across gaps **only where the
+  detector's map supports it** (`trace/tracer.py`, `trace/bridge.py`).
+- **Validation.** Dice at pixel level, matching plus coverage at fibril level,
+  per-metric morphology error (`validate.py`). Expect a **semi-automatic**
+  workflow for publication quality: the model proposes, you confirm.
 
 ## New to this code? Read in this order
 
 1. **[`docs/traps.md`](docs/traps.md)** — five mistakes already made here, four
-   of which the test suite could not catch. Short, and the highest value per
-   minute in the repository.
-2. **[`docs/approach.md`](docs/approach.md)** — what the pipeline does and why
-   it is shaped this way.
-3. **[`docs/decisions.md`](docs/decisions.md)** — why each alternative was
-   rejected, with the measurement that decided it and what would overturn it.
-4. **The tests, before the source.** `tests/test_snap.py` and
-   `tests/test_tracer_linking.py` teach the domain faster than the modules do,
-   because each test states one failure mode in a sentence: the traces are drawn
-   beside the fibrils, skeletonizing an X gives two junctions, geometry welds
-   collinear fibrils.
-5. **[`reports/README.md`](reports/README.md)** — every training run, what it
-   scored, and which comparisons between them are invalid.
+   of which the test suite could not catch. Highest value per minute here.
+2. **[`docs/approach.md`](docs/approach.md)** — what the pipeline does.
+3. **[`docs/decisions.md`](docs/decisions.md)** — why the alternatives lost,
+   with the measurement behind each.
+4. **The tests, before the source.** Each states one failure mode in a sentence:
+   traces are drawn beside the fibrils, skeletonizing an X gives two junctions,
+   geometry welds collinear fibrils.
+5. **[`reports/README.md`](reports/README.md)** — every training run, and which
+   comparisons between them are invalid.
 
-Then run `pytest` and `python scripts/make_synthetic_demo.py --out outputs_demo`
-to see the whole thing move.
-
-[`CONTRIBUTING.md`](CONTRIBUTING.md) has the setup, the conventions actually in
-force here, and a drill for taking ownership of code you did not write.
+[`CONTRIBUTING.md`](CONTRIBUTING.md) has setup, conventions, and a drill for
+taking ownership of code you did not write.
 
 ## Project layout
 
