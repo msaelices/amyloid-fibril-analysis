@@ -75,6 +75,9 @@ hard part is **finding the fibrils** in low-SNR micrographs with crossings.
 Then run `pytest` and `python scripts/make_synthetic_demo.py --out outputs_demo`
 to see the whole thing move.
 
+[`CONTRIBUTING.md`](CONTRIBUTING.md) has the setup, the conventions actually in
+force here, and a drill for taking ownership of code you did not write.
+
 ## Project layout
 
 ```
