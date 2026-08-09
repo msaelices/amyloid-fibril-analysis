@@ -55,23 +55,44 @@ hard part is **finding the fibrils** in low-SNR micrographs with crossings.
   **semi-automatic** workflow for publication quality: the model proposes, you
   confirm/split at ambiguous crossings.
 
-See [`docs/approach.md`](docs/approach.md) for the full rationale.
+## New to this code? Read in this order
+
+1. **[`docs/traps.md`](docs/traps.md)** — five mistakes already made here, four
+   of which the test suite could not catch. Short, and the highest value per
+   minute in the repository.
+2. **[`docs/approach.md`](docs/approach.md)** — what the pipeline does and why
+   it is shaped this way.
+3. **[`docs/decisions.md`](docs/decisions.md)** — why each alternative was
+   rejected, with the measurement that decided it and what would overturn it.
+4. **The tests, before the source.** `tests/test_snap.py` and
+   `tests/test_tracer_linking.py` teach the domain faster than the modules do,
+   because each test states one failure mode in a sentence: the traces are drawn
+   beside the fibrils, skeletonizing an X gives two junctions, geometry welds
+   collinear fibrils.
+5. **[`reports/README.md`](reports/README.md)** — every training run, what it
+   scored, and which comparisons between them are invalid.
+
+Then run `pytest` and `python scripts/make_synthetic_demo.py --out outputs_demo`
+to see the whole thing move.
 
 ## Project layout
 
 ```
 src/afa/
   io/            # .mrc reading (pixel size), annotation loading (ImageJ ROI / CSV / burned-in)
-  segment/       # classical vesselness baseline + U-Net interface
-  trace/         # skeleton -> graph -> orientation-aware centerlines, resampling & smoothing
+  segment/       # classical vesselness baseline, U-Net, dataset, tiled inference
+  trace/         # snapping, skeleton -> graph -> centerlines, gap bridging, resampling
   morphology/    # the metric definitions (deterministic, unit-tested)
+  validate.py    # automatic vs manual: Dice, coverage, fibril matching, metric error
   stats.py       # per-patient means/SD/95% CI
   viz.py         # overlay rendering
   pipeline.py    # end-to-end orchestration
   cli.py         # `afa` command-line interface
 configs/         # YAML pipeline configs
+scripts/         # training, validation, run comparison, one-off imports
+reports/         # tracked training run history (weights are not tracked)
 tests/           # unit tests (metrics verified against analytic shapes)
-data/            # raw/, annotations/, processed/ (gitignored -- never commit patient data)
+data/            # gitignored -- never commit patient data
 ```
 
 ## Install
