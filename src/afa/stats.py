@@ -18,7 +18,7 @@ METRIC_COLUMNS = [
 
 def _t_ci(values: np.ndarray, alpha: float = 0.05) -> tuple[float, float]:
     """t-based (1-alpha) confidence interval for the mean."""
-    from scipy import stats
+    from scipy import stats  # noqa: PLC0415
 
     v = values[np.isfinite(values)]
     n = v.size

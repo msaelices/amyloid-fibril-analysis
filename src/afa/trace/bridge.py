@@ -28,6 +28,7 @@ two fibrils that happen to end near each other from being welded into one.
 from __future__ import annotations
 
 import numpy as np
+from scipy.ndimage import map_coordinates
 
 
 def _endpoint_direction(points: np.ndarray, at_start: bool, k: int = 8) -> np.ndarray:
@@ -56,8 +57,6 @@ def _gap_evidence(
     evidence: np.ndarray, pos_a: np.ndarray, pos_b: np.ndarray, samples: int = 16
 ) -> float:
     """Mean of ``evidence`` sampled along the straight segment between two ends."""
-    from scipy.ndimage import map_coordinates
-
     t = np.linspace(0.0, 1.0, samples)[:, None]
     pts = pos_a[None, :] * (1 - t) + pos_b[None, :] * t
     vals = map_coordinates(

@@ -17,7 +17,7 @@ app = typer.Typer(add_completion=False, help="Amyloid fibril tracing & morpholog
 
 
 def _load_config(config: Path | None, pixel_size_a: float | None):
-    from afa.config import Config
+    from afa.config import Config  # noqa: PLC0415
 
     cfg = Config.from_yaml(config) if config else Config()
     if pixel_size_a is not None:
@@ -29,14 +29,14 @@ def _write_outputs(df, img, centerlines, out: Path, image_id: str, overlay: bool
     out.mkdir(parents=True, exist_ok=True)
     per_image = out / "per_image.csv"
     if per_image.exists():
-        import pandas as pd
+        import pandas as pd  # noqa: PLC0415
 
         prev = pd.read_csv(per_image)
         df = pd.concat([prev, df], ignore_index=True)
     df.to_csv(per_image, index=False)
     typer.echo(f"Wrote {per_image} ({len(df)} rows total)")
     if overlay:
-        from afa.viz import save_overlay
+        from afa.viz import save_overlay  # noqa: PLC0415
 
         labels = list(df["filament_id"].astype(str))[-len(centerlines):]
         p = save_overlay(img.data, centerlines, out / f"overlay_{image_id}.png", labels=labels)
@@ -54,7 +54,7 @@ def metrics_from_rois(
     overlay: bool = typer.Option(True, "--overlay/--no-overlay"),
 ) -> None:
     """Compute metrics from EXISTING manual traces (no automatic detection)."""
-    from afa.pipeline import metrics_from_traces
+    from afa.pipeline import metrics_from_traces  # noqa: PLC0415
 
     cfg = _load_config(config, pixel_size_a)
     df, img, cls = metrics_from_traces(mrc, traces, patient_id=patient, config=cfg)
@@ -71,7 +71,7 @@ def trace(
     overlay: bool = typer.Option(True, "--overlay/--no-overlay"),
 ) -> None:
     """Automatically detect + trace fibrils, then compute metrics."""
-    from afa.pipeline import trace_and_measure
+    from afa.pipeline import trace_and_measure  # noqa: PLC0415
 
     cfg = _load_config(config, pixel_size_a)
     df, img, cls = trace_and_measure(mrc, patient_id=patient, config=cfg)
@@ -85,9 +85,9 @@ def summarize(
     bootstrap: bool = typer.Option(False, "--bootstrap", help="Image-level bootstrap CI"),
 ) -> None:
     """Aggregate a per_image.csv into per-patient means/SD/95% CI."""
-    import pandas as pd
+    import pandas as pd  # noqa: PLC0415
 
-    from afa.stats import summarize_per_patient
+    from afa.stats import summarize_per_patient  # noqa: PLC0415
 
     df = pd.read_csv(per_image_csv)
     summary = summarize_per_patient(df, bootstrap=bootstrap)

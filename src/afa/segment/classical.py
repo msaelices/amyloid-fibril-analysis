@@ -33,8 +33,8 @@ def vesselness_probability(
     denoise:
         Apply an edge-preserving denoise before ridge detection.
     """
-    from skimage.filters import frangi
-    from skimage.restoration import denoise_bilateral
+    from skimage.filters import frangi  # noqa: PLC0415
+    from skimage.restoration import denoise_bilateral  # noqa: PLC0415
 
     img = image.astype(np.float32)
     img = (img - img.min()) / (np.ptp(img) + 1e-9)

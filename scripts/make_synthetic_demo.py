@@ -12,7 +12,13 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+import mrcfile
 import numpy as np
+from skimage.morphology import binary_dilation, disk
+
+from afa.pipeline import trace_and_measure
+from afa.stats import summarize_per_patient
+from afa.viz import save_overlay
 
 
 def synthetic_fibrils(shape=(512, 512), n=6, seed=0):
@@ -31,7 +37,6 @@ def synthetic_fibrils(shape=(512, 512), n=6, seed=0):
             xi, yi = int(round(x)), int(round(y))
             if 0 <= yi < shape[0] and 0 <= xi < shape[1]:
                 img[yi, xi] = 1.0
-    from skimage.morphology import binary_dilation, disk
 
     img = binary_dilation(img > 0, disk(2)).astype(np.float32)
     img = 1.0 - img  # fibrils darker than background
@@ -44,12 +49,6 @@ def main():
     ap.add_argument("--out", type=Path, default=Path("outputs_demo"))
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
-
-    import mrcfile
-
-    from afa.pipeline import trace_and_measure
-    from afa.stats import summarize_per_patient
-    from afa.viz import save_overlay
 
     img, traces = synthetic_fibrils()
     mrc_path = args.out / "demo.mrc"

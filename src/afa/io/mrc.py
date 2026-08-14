@@ -59,7 +59,7 @@ def load_mrc(
     -------
     MrcImage
     """
-    import mrcfile
+    import mrcfile  # noqa: PLC0415
 
     path = Path(path)
     with mrcfile.open(path, permissive=True) as mrc:

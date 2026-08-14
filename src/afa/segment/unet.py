@@ -92,9 +92,9 @@ class UNetSegmenter:
 
         # Deferred: torch is an optional dependency (the ``dl`` extra), so
         # importing this module must not require it -- only using the U-Net does.
-        import torch
+        import torch  # noqa: PLC0415
 
-        from afa.segment.torch_unet import load_model
+        from afa.segment.torch_unet import load_model  # noqa: PLC0415
 
         self.device = self.device or ("cuda" if torch.cuda.is_available() else "cpu")
         self._model = load_model(self.weights, device=self.device)
@@ -106,7 +106,8 @@ class UNetSegmenter:
         The image is normalized the same way as during training, so passing a
         raw micrograph is fine.
         """
-        import torch  # optional dependency; see load()
+        # Deferred for the same reason as in load().
+        import torch  # noqa: PLC0415
 
         if self._model is None:
             self.load()

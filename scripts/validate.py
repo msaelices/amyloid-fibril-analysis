@@ -22,6 +22,20 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from afa.segment.classical import vesselness_probability
+from afa.segment.dataset import load_labelled_images, split_images
+from afa.segment.unet import UNetSegmenter
+from afa.trace.tracer import trace_centerlines
+from afa.validate import (
+    compare_metrics,
+    coverage_report,
+    dice,
+    iou,
+    match_traces,
+    summarize_errors,
+)
+from afa.viz import save_overlay
+
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
@@ -47,18 +61,6 @@ def main() -> None:
     ap.add_argument("--overlays", action="store_true", help="write per-image overlays")
     args = ap.parse_args()
 
-    from afa.segment.classical import vesselness_probability
-    from afa.segment.dataset import load_labelled_images, split_images
-    from afa.trace.tracer import trace_centerlines
-    from afa.validate import (
-        compare_metrics,
-        coverage_report,
-        dice,
-        iou,
-        match_traces,
-        summarize_errors,
-    )
-
     image_ids = sorted(p.stem for p in (args.data / "images").glob("*.png"))
     train_ids, val_ids, test_ids = split_images(
         image_ids, n_val=args.n_val, n_test=args.n_test, seed=args.seed
@@ -81,8 +83,6 @@ def main() -> None:
 
     predictor = None
     if args.detector == "unet":
-        from afa.segment.unet import UNetSegmenter
-
         predictor = UNetSegmenter(weights=args.weights).load()
 
     args.out.mkdir(parents=True, exist_ok=True)
@@ -151,8 +151,6 @@ def main() -> None:
         comparisons.append(comp)
 
         if args.overlays:
-            from afa.viz import save_overlay
-
             save_overlay(
                 item.image, predicted, args.out / f"overlay_{item.image_id}.png"
             )

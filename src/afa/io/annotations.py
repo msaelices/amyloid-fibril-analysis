@@ -56,7 +56,7 @@ def load_traces(path: str | Path, *, source: str = "auto") -> list[Trace]:
 
 
 def _load_imagej(path: Path) -> list[Trace]:
-    import roifile
+    import roifile  # noqa: PLC0415
 
     rois = roifile.ImagejRoi.fromfile(str(path))
     if isinstance(rois, roifile.ImagejRoi):
@@ -74,7 +74,7 @@ def _load_imagej(path: Path) -> list[Trace]:
 
 
 def _load_csv(path: Path) -> list[Trace]:
-    import pandas as pd
+    import pandas as pd  # noqa: PLC0415
 
     df = pd.read_csv(path)
     cols = {c.lower(): c for c in df.columns}
@@ -101,8 +101,8 @@ def extract_burned_in(
     boolean mask of the overlay; turning that mask into ordered polylines is the
     job of :mod:`afa.trace.tracer`. Fidelity is limited -- prefer vector ROIs.
     """
-    from skimage.filters import threshold_otsu
-    from skimage.morphology import remove_small_objects
+    from skimage.filters import threshold_otsu  # noqa: PLC0415
+    from skimage.morphology import remove_small_objects  # noqa: PLC0415
 
     img = image.astype(np.float32)
     img = (img - img.min()) / (np.ptp(img) + 1e-9)

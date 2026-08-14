@@ -24,6 +24,7 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 import numpy as np
+from PIL import Image
 
 A = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
 P = "{http://schemas.openxmlformats.org/presentationml/2006/main}"
@@ -102,7 +103,6 @@ def _slide_image(z: zipfile.ZipFile, n: int) -> tuple[bytes, str]:
 
 def parse_slide(z: zipfile.ZipFile, n: int) -> dict:
     """Extract the micrograph plus its traces and number labels, in pixel coords."""
-    from PIL import Image
 
     blob, target = _slide_image(z, n)
     width, height = Image.open(io.BytesIO(blob)).size
