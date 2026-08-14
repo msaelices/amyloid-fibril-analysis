@@ -19,6 +19,12 @@ import argparse
 import csv
 from pathlib import Path
 
+import numpy as np
+from PIL import Image
+
+from afa.io.match import MATCH_THRESHOLD, MatchResult, match_micrograph
+from afa.io.mrc import load_mrc
+
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
@@ -29,12 +35,6 @@ def main() -> None:
     ap.add_argument("--threshold", type=float, default=None,
                     help="minimum correlation to accept a pairing")
     args = ap.parse_args()
-
-    import numpy as np
-    from PIL import Image
-
-    from afa.io.match import MATCH_THRESHOLD, MatchResult, match_micrograph
-    from afa.io.mrc import load_mrc
 
     threshold = args.threshold if args.threshold is not None else MATCH_THRESHOLD
 

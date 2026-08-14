@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+from PIL import Image
 from scipy.ndimage import gaussian_filter
 
 MATCH_THRESHOLD = 0.85
@@ -105,8 +106,6 @@ def match_micrograph(
     Both images are block-averaged to a common grid, the carbon is masked out,
     and the remainder is lightly smoothed before correlating.
     """
-    from PIL import Image
-
     reference = _normalize(block_average(micrograph, factor))
     mask = carbon_mask(reference)
     ref_smooth = gaussian_filter(reference, smooth)
