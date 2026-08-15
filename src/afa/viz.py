@@ -29,10 +29,10 @@ def save_overlay(
     labels:
         Optional per-fibril labels drawn near each trace start.
     """
-    import matplotlib
+    import matplotlib  # noqa: PLC0415
 
     matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
+    import matplotlib.pyplot as plt  # noqa: PLC0415
 
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)

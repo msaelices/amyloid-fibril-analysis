@@ -288,7 +288,7 @@ class PatchDataset:
     def __getitem__(self, idx: int):
         # Deferred: torch is an optional dependency (the ``dl`` extra) and the
         # deterministic pipeline must import and run without it.
-        import torch
+        import torch  # noqa: PLC0415
 
         i, y, x = self.index[idx]
         item = self.items[i]

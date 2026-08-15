@@ -20,6 +20,11 @@ import argparse
 import json
 from pathlib import Path
 
+from afa.segment.dataset import load_labelled_images, split_images
+from afa.segment.unet import UNetSegmenter
+from afa.trace.tracer import trace_centerlines
+from afa.validate import coverage_report, dice, match_traces
+
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
@@ -33,11 +38,6 @@ def main() -> None:
     ap.add_argument("--threshold", type=float, default=0.5)
     ap.add_argument("--width-px", type=int, default=7)
     args = ap.parse_args()
-
-    from afa.segment.dataset import load_labelled_images, split_images
-    from afa.segment.unet import UNetSegmenter
-    from afa.trace.tracer import trace_centerlines
-    from afa.validate import coverage_report, dice, match_traces
 
     image_ids = sorted(p.stem for p in (args.data / "images").glob("*.png"))
     _, val_ids, _ = split_images(

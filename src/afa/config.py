@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
+import yaml
+
 
 @dataclass
 class DetectConfig:
@@ -37,8 +39,6 @@ class Config:
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> Config:
-        import yaml
-
         with open(path) as fh:
             raw = yaml.safe_load(fh) or {}
         detect = DetectConfig(**raw.pop("detect", {}))

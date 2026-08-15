@@ -28,6 +28,7 @@ from collections import defaultdict
 
 import numpy as np
 
+from afa.trace.bridge import bridge_gaps
 from afa.trace.resample import resample_polyline, smooth_polyline
 
 
@@ -96,8 +97,8 @@ def trace_centerlines(
     -------
     list of ``(N, 2)`` arrays of ``(x, y)`` centerline vertices.
     """
-    from skan import Skeleton, summarize
-    from skimage.morphology import skeletonize
+    from skan import Skeleton, summarize  # noqa: PLC0415
+    from skimage.morphology import skeletonize  # noqa: PLC0415
 
     skel_img = skeletonize(np.asarray(mask, dtype=bool))
     if skel_img.sum() == 0:
@@ -156,8 +157,6 @@ def trace_centerlines(
         centerlines = [_finish(b["coords"], resample_step, smooth_window) for b in branches]
 
     if bridge_gap_px > 0:
-        from afa.trace.bridge import bridge_gaps
-
         centerlines, merged = bridge_gaps(
             centerlines,
             max_gap_px=bridge_gap_px,

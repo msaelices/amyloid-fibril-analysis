@@ -23,6 +23,8 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
+from afa.segment.dataset import PatchDataset, load_labelled_images, split_images
+
 # Summary fields appended to the run log. The per-epoch curves stay in the
 # individual report; this is the one-line-per-run history.
 SUMMARY_FIELDS = (
@@ -96,8 +98,9 @@ def main() -> None:
     ap.add_argument("--device", default=None)
     args = ap.parse_args()
 
-    from afa.segment.dataset import PatchDataset, load_labelled_images, split_images
-    from afa.segment.torch_unet import train
+    # Deferred: torch is an optional dependency, and tests/test_train_report.py
+    # imports write_report from this module without it installed.
+    from afa.segment.torch_unet import train  # noqa: PLC0415
 
     image_ids = sorted(p.stem for p in (args.data / "images").glob("*.png"))
     train_ids, val_ids, test_ids = split_images(

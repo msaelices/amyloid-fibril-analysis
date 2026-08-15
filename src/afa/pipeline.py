@@ -12,6 +12,7 @@ from afa.io.annotations import Trace, load_traces
 from afa.io.mrc import MrcImage, load_mrc
 from afa.morphology.metrics import compute_metrics
 from afa.segment.classical import vesselness_probability
+from afa.segment.unet import UNetSegmenter
 from afa.trace.resample import resample_polyline, smooth_polyline
 from afa.trace.tracer import trace_centerlines
 
@@ -84,8 +85,6 @@ def trace_and_measure(
     image_id = image_id or Path(mrc_path).stem
 
     if config.detect.method == "unet":
-        from afa.segment.unet import UNetSegmenter
-
         seg = UNetSegmenter(weights=config.detect.unet_weights).load()
         prob = seg.predict(img.data)
     else:
