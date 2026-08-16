@@ -98,6 +98,7 @@ def trace_and_measure(
         resample_step=config.trace.resample_step,
         smooth_window=config.trace.smooth_window,
         min_branch_px=config.trace.min_branch_px,
+        mask_opening_px=config.trace.mask_opening_px,
         link_crossings=config.trace.link_crossings,
         max_link_angle_deg=config.trace.max_link_angle_deg,
         merge_junction_px=config.trace.merge_junction_px,

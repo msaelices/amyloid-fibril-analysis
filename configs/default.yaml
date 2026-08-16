@@ -12,11 +12,12 @@ detect:
 trace:
   resample_step: 1.0        # pixels
   smooth_window: 5          # odd number of points
-  min_branch_px: 15         # drop shorter skeleton branches (noise)
+  min_branch_px: 15         # drop shorter free-ended branches (noise)
+  mask_opening_px: 2        # clean the mask before skeletonizing
   link_crossings: true
   max_link_angle_deg: 60.0  # max turn when pairing branches at a junction
   merge_junction_px: 15.0   # collapse the two Y-nodes of an X into one
-  bridge_gap_px: 60.0       # join fragments across a break in the mask (0 = off)
+  bridge_gap_px: 100.0      # join fragments across a break in the mask (0 = off)
   bridge_angle_deg: 30.0    # collinearity required to bridge a gap
   min_bridge_evidence: 0.25 # detector support required along the bridge
 
