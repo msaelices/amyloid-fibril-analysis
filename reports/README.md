@@ -88,6 +88,48 @@ tortuosity 2.5 against a true 1.0). Tortuosity is the only descriptor valid
 without a pixel size, so that trade is bad here. The schedule stays available
 behind `--cosine-schedule` and is off by default.
 
+## The cross-validated baseline (`cv5_*`)
+
+Five folds over all 41 images, so every image is scored by a model that never saw
+it and the pooled sample is **111 fibrils instead of 20**.
+
+| | pooled |
+| --- | --- |
+| one-to-one recall | **0.252** (28/111) |
+| coverage | 0.735 |
+| Dice, labelled / all px | 0.443 / 0.094 |
+| objects per image | 97 |
+| recall per fold | 0.33, 0.29, 0.24, 0.15, 0.21 (sd 0.063) |
+
+**This supersedes the single-split figure, and is lower than it.** That split
+reported 7/20 = 0.35, which sits outside both the pooled 95% interval and the
+per-fold range: it was a favourable draw, not a result. Treat 0.25 as the
+baseline.
+
+The point of the exercise is the interval, not the point estimate:
+
+| | recall | 95% CI | width |
+| --- | --- | --- | --- |
+| single split | 0.350 | [0.154, 0.592] | 0.438 |
+| 5 folds | 0.252 | [0.175, 0.344] | **0.169** |
+
+2.6x tighter. A paired comparison at n=20 needed roughly a 20-point swing to
+reach significance; at n=111 a few points suffice. Experiments on this
+repository are measurable now, which they were not before.
+
+Morphology on the 28 matched fibrils, in nm (0.3299 nm/px, calibrated from the
+matched `.mrc` files):
+
+| metric | manual mean | mean abs error | relative |
+| --- | --- | --- | --- |
+| length | 112.4 nm | 18.6 nm | 17% |
+| tortuosity | 1.023 | 0.115 | 11% |
+| max curvature | 1.19 /nm | 0.76 | 95% |
+| mean abs curvature | 0.046 /nm | 0.149 | 500% |
+
+Length and tortuosity are usable. **Every curvature column is not**, and that is
+fragmentation (issue #7), not units.
+
 ## Reproducibility
 
 `sweep_pw10_nosched` reproduced `unet_v2` exactly: same best validation loss at
