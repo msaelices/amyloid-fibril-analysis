@@ -156,3 +156,42 @@ def test_one_straight_continuation_beats_two_marginal_ones():
     quality = {(0, 2): w(1.0), (0, 4): w(59.0), (2, 6): w(59.0)}
 
     assert _best_matching(quality, [0, 2, 4, 6]) == [(0, 2)]
+
+
+def test_mask_opening_removes_the_bumps_that_become_spurs():
+    """Skeletonizing a ragged mask yields a branch per bump; opening prevents it."""
+    from skimage.morphology import skeletonize
+
+    rng = np.random.default_rng(0)
+    mask = np.zeros((200, 400), dtype=bool)
+    mask[96:105, 20:380] = True                       # a thick straight fibril
+    for _ in range(120):                              # ragged edge
+        y, x = rng.integers(94, 107), rng.integers(20, 380)
+        mask[y, x] = True
+
+    ragged = trace_centerlines(mask, min_branch_px=5, mask_opening_px=0)
+    cleaned = trace_centerlines(mask, min_branch_px=5, mask_opening_px=2)
+
+    assert skeletonize(mask).sum() > 0
+    assert len(cleaned) < len(ragged), f"{len(ragged)} -> {len(cleaned)}"
+    assert max(_lengths(cleaned)) > 300
+
+
+def test_mask_opening_leaves_a_clean_fibril_alone():
+    mask = np.zeros((200, 400), dtype=bool)
+    _draw(mask, (20, 100), (380, 100), width=3)
+
+    without = trace_centerlines(mask, min_branch_px=15, mask_opening_px=0)
+    with_opening = trace_centerlines(mask, min_branch_px=15, mask_opening_px=2)
+
+    assert len(without) == len(with_opening) == 1
+    assert _lengths(with_opening)[0] == pytest.approx(_lengths(without)[0], rel=0.1)
+
+
+def test_mask_opening_can_erase_a_fibril_thinner_than_its_radius():
+    """The cost of the operation, pinned so the radius is chosen knowingly."""
+    mask = np.zeros((200, 400), dtype=bool)
+    mask[100, 20:380] = True     # one pixel wide
+
+    assert len(trace_centerlines(mask, min_branch_px=15, mask_opening_px=0)) == 1
+    assert trace_centerlines(mask, min_branch_px=15, mask_opening_px=3) == []

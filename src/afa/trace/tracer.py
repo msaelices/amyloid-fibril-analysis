@@ -48,6 +48,7 @@ def trace_centerlines(
     resample_step: float = 1.0,
     smooth_window: int = 5,
     min_branch_px: int = 10,
+    mask_opening_px: int = 0,
     link_crossings: bool = True,
     max_link_angle_deg: float = 60.0,
     merge_junction_px: float = 15.0,
@@ -68,6 +69,20 @@ def trace_centerlines(
         Drop free-ended skeleton branches shorter than this (removes spurs and
         noise). Junction-to-junction branches are exempt: they are structure,
         not noise.
+    mask_opening_px:
+        Radius of a morphological opening applied to the mask *before*
+        skeletonizing. Zero disables it.
+
+        This attacks the cause rather than the symptom. Skeletonizing the raw
+        thresholded mask produces a hairball: measured on held-out images, 655
+        to 1122 branches with a median length of 5 to 12 px, against a median
+        manual fibril of 430 px. The mask edge is ragged, and every bump becomes
+        a branch, so the linking stage is asked to rebuild one fibril out of
+        roughly fifty fragments.
+
+        Opening erodes then dilates, removing those bumps and the thin spurious
+        connections between neighbouring fibrils. Closing, the opposite
+        operation and the intuitive guess, measured neutral to worse.
     merge_junction_px:
         Junction-to-junction branches shorter than this are treated as the
         bridge of a single crossing and their two endpoints collapsed into one
@@ -98,9 +113,12 @@ def trace_centerlines(
     list of ``(N, 2)`` arrays of ``(x, y)`` centerline vertices.
     """
     from skan import Skeleton, summarize  # noqa: PLC0415
-    from skimage.morphology import skeletonize  # noqa: PLC0415
+    from skimage.morphology import binary_opening, disk, skeletonize  # noqa: PLC0415
 
-    skel_img = skeletonize(np.asarray(mask, dtype=bool))
+    binary = np.asarray(mask, dtype=bool)
+    if mask_opening_px > 0:
+        binary = binary_opening(binary, disk(mask_opening_px))
+    skel_img = skeletonize(binary)
     if skel_img.sum() == 0:
         return []
 
