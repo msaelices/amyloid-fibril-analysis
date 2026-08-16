@@ -1,0 +1,69 @@
+{
+  "name": "cv5",
+  "finished_at": "2026-08-16T18:25:34+00:00",
+  "folds": 5,
+  "n_images": 41,
+  "n_fibrils": 111,
+  "matched": 28,
+  "recall": 0.25225225225225223,
+  "mean_dice_labelled": 0.44264611414348615,
+  "mean_dice_all_pixels": 0.09368923656288321,
+  "mean_coverage": 0.7348177861094363,
+  "mean_detected": 96.8048780487805,
+  "per_fold": [
+    {
+      "fold": 0,
+      "best_val_loss": 0.8271221564366267,
+      "best_epoch": 45,
+      "matched": 9,
+      "n_manual": 27
+    },
+    {
+      "fold": 1,
+      "best_val_loss": 0.8031459667465903,
+      "best_epoch": 43,
+      "matched": 5,
+      "n_manual": 17
+    },
+    {
+      "fold": 2,
+      "best_val_loss": 0.9178603383210989,
+      "best_epoch": 38,
+      "matched": 6,
+      "n_manual": 25
+    },
+    {
+      "fold": 3,
+      "best_val_loss": 0.9401529593901201,
+      "best_epoch": 42,
+      "matched": 2,
+      "n_manual": 13
+    },
+    {
+      "fold": 4,
+      "best_val_loss": 0.9365015162361993,
+      "best_epoch": 48,
+      "matched": 6,
+      "n_manual": 29
+    }
+  ],
+  "args": {
+    "data": "data/dataset",
+    "models": "models/cv",
+    "reports": "reports",
+    "cache": "data/dataset/cache",
+    "name": "cv5",
+    "folds": "5",
+    "n_val": "6",
+    "epochs": "50",
+    "batch_size": "8",
+    "patch": "256",
+    "overlap": "64",
+    "threshold": "0.5",
+    "width_px": "7",
+    "bridge_gap_px": "60.0",
+    "pixel_size_nm": "0.3299",
+    "seed": "0",
+    "device": "None"
+  }
+}

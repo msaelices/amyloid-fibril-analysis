@@ -216,6 +216,47 @@ def split_images(
     return sorted(train), sorted(val), sorted(test)
 
 
+def kfold_splits(
+    image_ids: list[str], *, n_folds: int = 5, n_val: int = 6, seed: int = 0
+) -> list[tuple[list[str], list[str], list[str]]]:
+    """Train/val/test triples where every image is tested exactly once.
+
+    A single held-out split leaves too few fibrils to measure anything: with 20,
+    a change from 3/20 to 7/20 does not reach significance, so a real improvement
+    cannot be told from noise. Rotating the test set over ``n_folds`` folds and
+    pooling the results evaluates *every* image with a model that never saw it,
+    which is the only way to get the sample size up without more annotation.
+
+    The validation images are drawn afresh per fold, so no image is permanently
+    the one that selects checkpoints.
+
+    Returns
+    -------
+    One ``(train, val, test)`` triple per fold, each sorted.
+    """
+    if n_folds < 2:
+        raise ValueError("n_folds must be at least 2")
+    ids = sorted(image_ids)
+    if n_folds > len(ids):
+        raise ValueError(f"n_folds ({n_folds}) exceeds the number of images ({len(ids)})")
+
+    rng = np.random.default_rng(seed)
+    shuffled = [str(x) for x in np.asarray(ids)[rng.permutation(len(ids))]]
+    blocks = [shuffled[i::n_folds] for i in range(n_folds)]
+
+    folds = []
+    for i, test in enumerate(blocks):
+        rest = [x for x in shuffled if x not in set(test)]
+        if n_val >= len(rest):
+            raise ValueError(
+                f"n_val ({n_val}) leaves no training images in fold {i} ({len(rest)} available)"
+            )
+        order = np.random.default_rng(seed + 1 + i).permutation(len(rest))
+        rotated = [rest[j] for j in order]
+        folds.append((sorted(rotated[n_val:]), sorted(rotated[:n_val]), sorted(test)))
+    return folds
+
+
 def sample_patches(
     item: LabelledImage,
     *,

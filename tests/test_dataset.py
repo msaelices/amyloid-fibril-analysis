@@ -76,3 +76,56 @@ def test_cache_is_reused_when_nothing_changed(tmp_path):
 
     assert np.array_equal(first.mask, second.mask)
     assert len(list(cache.iterdir())) == 1
+
+
+def test_kfold_tests_every_image_exactly_once():
+    from afa.segment.dataset import kfold_splits
+
+    ids = [f"img{i:02d}" for i in range(41)]
+    folds = kfold_splits(ids, n_folds=5, n_val=6)
+
+    tested = [i for _, _, test in folds for i in test]
+    assert sorted(tested) == ids, "every image must be evaluated, and only once"
+    assert len(folds) == 5
+
+
+def test_kfold_keeps_the_three_sets_disjoint_within_a_fold():
+    from afa.segment.dataset import kfold_splits
+
+    ids = [f"img{i:02d}" for i in range(41)]
+
+    for train, val, test in kfold_splits(ids, n_folds=5, n_val=6):
+        assert not (set(train) & set(val))
+        assert not (set(train) & set(test))
+        assert not (set(val) & set(test))
+        assert set(train) | set(val) | set(test) == set(ids)
+        assert len(val) == 6
+
+
+def test_kfold_does_not_always_validate_on_the_same_images():
+    """Otherwise one image permanently decides every checkpoint."""
+    from afa.segment.dataset import kfold_splits
+
+    folds = kfold_splits([f"img{i:02d}" for i in range(41)], n_folds=5, n_val=6)
+    val_sets = [frozenset(v) for _, v, _ in folds]
+
+    assert len(set(val_sets)) == len(val_sets)
+
+
+def test_kfold_is_deterministic_and_seed_sensitive():
+    from afa.segment.dataset import kfold_splits
+
+    ids = [f"img{i:02d}" for i in range(41)]
+    assert kfold_splits(ids, seed=0) == kfold_splits(ids, seed=0)
+    assert kfold_splits(ids, seed=1) != kfold_splits(ids, seed=0)
+
+
+def test_kfold_rejects_impossible_configurations():
+    from afa.segment.dataset import kfold_splits
+
+    with pytest.raises(ValueError):
+        kfold_splits([f"img{i}" for i in range(10)], n_folds=1)
+    with pytest.raises(ValueError):
+        kfold_splits([f"img{i}" for i in range(4)], n_folds=5)
+    with pytest.raises(ValueError):
+        kfold_splits([f"img{i}" for i in range(10)], n_folds=5, n_val=9)
