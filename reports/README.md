@@ -130,6 +130,24 @@ matched `.mrc` files):
 Length and tortuosity are usable. **Every curvature column is not**, and that is
 fragmentation (issue #7), not units.
 
+### What to expect on new data
+
+**About 0.25, interval [0.175, 0.344].** Not the tuned figures quoted elsewhere.
+
+The k-fold makes the *detector* out-of-fold; it does nothing for the *tracer*,
+whose parameters were selected on the pooled out-of-fold predictions of all 41
+images. So is the detection threshold, the match distance, the coverage
+tolerance and `width_px`. For everything downstream of the detector, these
+numbers are training-set numbers.
+
+A repeated nested-selection estimate -- re-choosing the tracer configuration on
+4/5 of the images and scoring only the held-out fifth -- gives **0.281 +/- 0.018**
+against 0.351 when the same images are used for both. Roughly 8 of 11 apparently
+gained fibrils were selection optimism.
+
+A defensible number for new data requires new annotation. Nothing in this
+dataset can produce one.
+
 ## Reproducibility
 
 `sweep_pw10_nosched` reproduced `unet_v2` exactly: same best validation loss at

@@ -20,6 +20,7 @@ import argparse
 import json
 from pathlib import Path
 
+from afa.config import Config
 from afa.segment.dataset import load_labelled_images, split_images
 from afa.segment.unet import UNetSegmenter
 from afa.trace.tracer import trace_centerlines
@@ -37,7 +38,14 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--threshold", type=float, default=0.5)
     ap.add_argument("--width-px", type=int, default=7)
+    ap.add_argument("--config", type=Path, default=Path("configs/default.yaml"),
+                    help="tracer settings; the single source of truth")
     args = ap.parse_args()
+
+    # One source of truth for the tracer. Hardcoding these meant
+    # validate.py, cross_validate.py and compare_runs.py each ran a
+    # different tracer, so their numbers were silently incomparable.
+    trace_cfg = (Config.from_yaml(args.config) if args.config else Config()).trace
 
     image_ids = sorted(p.stem for p in (args.data / "images").glob("*.png"))
     _, val_ids, _ = split_images(
@@ -58,7 +66,16 @@ def main() -> None:
             pred = prob > args.threshold
             valid = ~item.ignore
             dices.append(dice(pred & valid, item.mask & valid))
-            cls = trace_centerlines(pred, min_branch_px=20)
+            cls = trace_centerlines(
+                pred,
+                min_branch_px=trace_cfg.min_branch_px,
+                max_link_angle_deg=trace_cfg.max_link_angle_deg,
+                merge_junction_px=trace_cfg.merge_junction_px,
+                bridge_gap_px=trace_cfg.bridge_gap_px,
+                bridge_angle_deg=trace_cfg.bridge_angle_deg,
+                min_bridge_evidence=trace_cfg.min_bridge_evidence,
+                evidence=prob,
+            )
             objs.append(len(cls))
             covs.append(coverage_report(item.centerlines, cls, tolerance=6.0).mean())
             m = match_traces(cls, item.centerlines, max_distance=15.0)

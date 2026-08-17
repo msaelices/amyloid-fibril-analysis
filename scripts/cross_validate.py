@@ -23,6 +23,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from afa.config import Config
 from afa.segment.dataset import PatchDataset, kfold_splits, load_labelled_images
 from afa.segment.unet import UNetSegmenter
 from afa.trace.tracer import trace_centerlines
@@ -44,12 +45,18 @@ def main() -> None:
     ap.add_argument("--overlap", type=int, default=64)
     ap.add_argument("--threshold", type=float, default=0.5)
     ap.add_argument("--width-px", type=int, default=7)
-    ap.add_argument("--bridge-gap-px", type=float, default=60.0)
     ap.add_argument("--pixel-size-nm", type=float, default=0.3299,
                     help="calibrated from the matched .mrc files; see issue #4")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--device", default=None)
+    ap.add_argument("--config", type=Path, default=Path("configs/default.yaml"),
+                    help="tracer settings; the single source of truth")
     args = ap.parse_args()
+
+    # One source of truth for the tracer. Hardcoding these meant
+    # validate.py, cross_validate.py and compare_runs.py each ran a
+    # different tracer, so their numbers were silently incomparable.
+    trace_cfg = (Config.from_yaml(args.config) if args.config else Config()).trace
 
     # Deferred: torch is an optional dependency and the rest of this script's
     # imports must work without it.
@@ -92,8 +99,16 @@ def main() -> None:
             prob = seg.predict(item.image)
             pred = prob > args.threshold
             valid = ~item.ignore
-            cls = trace_centerlines(pred, min_branch_px=20,
-                                    bridge_gap_px=args.bridge_gap_px, evidence=prob)
+            cls = trace_centerlines(
+                pred,
+                min_branch_px=trace_cfg.min_branch_px,
+                max_link_angle_deg=trace_cfg.max_link_angle_deg,
+                merge_junction_px=trace_cfg.merge_junction_px,
+                bridge_gap_px=trace_cfg.bridge_gap_px,
+                bridge_angle_deg=trace_cfg.bridge_angle_deg,
+                min_bridge_evidence=trace_cfg.min_bridge_evidence,
+                evidence=prob,
+            )
             m = match_traces(cls, item.centerlines, max_distance=15.0)
             cover = coverage_report(item.centerlines, cls, tolerance=6.0)
             matched += len(m.pairs)
