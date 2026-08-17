@@ -22,6 +22,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from afa.config import Config
 from afa.segment.classical import vesselness_probability
 from afa.segment.dataset import load_labelled_images, split_images
 from afa.segment.unet import UNetSegmenter
@@ -52,14 +53,19 @@ def main() -> None:
     ap.add_argument("--threshold", type=float, default=0.5)
     ap.add_argument("--width-px", type=int, default=7)
     ap.add_argument("--match-distance", type=float, default=15.0)
-    ap.add_argument("--bridge-gap-px", type=float, default=60.0,
-                    help="join fragments across gaps this long, checked against the map")
     ap.add_argument("--coverage-tolerance", type=float, default=6.0,
                     help="px from a manual centerline still counted as covered")
     ap.add_argument("--pixel-size-nm", type=float, default=1.0,
                     help="nm per pixel; 1.0 leaves lengths in pixels")
     ap.add_argument("--overlays", action="store_true", help="write per-image overlays")
+    ap.add_argument("--config", type=Path, default=Path("configs/default.yaml"),
+                    help="tracer settings; the single source of truth")
     args = ap.parse_args()
+
+    # One source of truth for the tracer. Hardcoding these meant
+    # validate.py, cross_validate.py and compare_runs.py each ran a
+    # different tracer, so their numbers were silently incomparable.
+    trace_cfg = (Config.from_yaml(args.config) if args.config else Config()).trace
 
     image_ids = sorted(p.stem for p in (args.data / "images").glob("*.png"))
     train_ids, val_ids, test_ids = split_images(
@@ -103,8 +109,12 @@ def main() -> None:
         valid = ~item.ignore
         predicted = trace_centerlines(
             pred_mask,
-            min_branch_px=20,
-            bridge_gap_px=args.bridge_gap_px,
+            min_branch_px=trace_cfg.min_branch_px,
+            max_link_angle_deg=trace_cfg.max_link_angle_deg,
+            merge_junction_px=trace_cfg.merge_junction_px,
+            bridge_gap_px=trace_cfg.bridge_gap_px,
+            bridge_angle_deg=trace_cfg.bridge_angle_deg,
+            min_bridge_evidence=trace_cfg.min_bridge_evidence,
             evidence=prob,
         )
         match = match_traces(predicted, item.centerlines, max_distance=args.match_distance)
