@@ -104,7 +104,15 @@ def trace_centerlines(
     if skel_img.sum() == 0:
         return []
 
-    skeleton = Skeleton(skel_img)
+    try:
+        skeleton = Skeleton(skel_img)
+    except ValueError:
+        # A skeleton of isolated pixels is non-empty but has no *paths*, and
+        # skan raises rather than returning an empty graph. Detecting that up
+        # front would mean reimplementing its path-finding, so catch it: an
+        # image whose detections are all isolated specks has no fibrils to
+        # trace, which is a legitimate answer and not an error.
+        return []
     summary = summarize(skeleton, separator="_")
 
     raw = []

@@ -156,3 +156,21 @@ def test_one_straight_continuation_beats_two_marginal_ones():
     quality = {(0, 2): w(1.0), (0, 4): w(59.0), (2, 6): w(59.0)}
 
     assert _best_matching(quality, [0, 2, 4, 6]) == [(0, 2)]
+
+
+def test_a_mask_of_isolated_specks_traces_to_nothing_instead_of_raising():
+    """skan raises on a non-empty skeleton with no paths; that is a valid answer.
+
+    Reachable from real data: a detector that fires on scattered noise, or any
+    mask whose components are single pixels.
+    """
+    speckled = np.zeros((60, 60), dtype=bool)
+    speckled[10, 10] = True
+    speckled[40, 40] = True
+
+    assert trace_centerlines(speckled, min_branch_px=15) == []
+    assert trace_centerlines(np.zeros((60, 60), dtype=bool)) == []
+
+    single = np.zeros((60, 60), dtype=bool)
+    single[30, 30] = True
+    assert trace_centerlines(single) == []
