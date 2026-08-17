@@ -75,6 +75,18 @@ between distinct fibrils, and the ground truth measured that as 0%
 (`traps.md` §3). The pipeline supplies the detector's map; a bare
 `trace_centerlines(mask)` has bridging off.
 
+**11b. Morphological opening of the mask was tried and rejected.** Skeletonizing
+the thresholded mask yields a hairball (655-1122 branches per image, median
+length 5-12 px, against a median manual fibril of 430 px), so cleaning the mask
+looked like the fix. Opening does raise recall, but it takes the **mean**
+absolute tortuosity error from 0.115 to 1.15 while leaving the median untouched
+at 0.064 -- and tortuosity is one of only two descriptors currently usable.
+Reporting the median hid that completely. It also sits on a cliff: radius 3
+loses 12 fibrils and is worse than no opening at all, and the radius is in
+pixels, so a batch imaged 30% smaller would land there. *Revisit only with a
+radius derived from measured fibril width, and judged on the mean as well as the
+median.*
+
 **12. A self-contained U-Net, not a pretrained backbone.** A few dozen grayscale
 images with nothing like ImageNet statistics, on CPU. A resnet34 encoder buys
 little, needs a weights download, and dragged in a timm/torchvision chain that

@@ -1,6 +1,6 @@
 # Traps
 
-Five mistakes already made here. Each looked correct while being written, and
+Six mistakes already made here. Each looked correct while being written, and
 four were caught by adversarial review rather than by the test suite. Read this
 first.
 
@@ -66,7 +66,36 @@ across its own gap, two different ones have nothing between them. Hence
   `scripts/validate.py` cannot warn about this — to it, those are just the test
   set.
 
-## 5. Small samples do not support the claims they seem to
+## 5. Tuning on the evaluation set invents its own significance
+
+Sweeping ~50 tracer configurations against the same 111 fibrils and then
+reporting the best cell's p-value treats a search as if it had been a single
+comparison. Measured on the real search:
+
+| | p |
+| --- | --- |
+| raw, as first reported | 0.0074 |
+| Bonferroni over the 12 documented mask variants | 0.089 |
+| Bonferroni over the full 51-variant family | 0.377 |
+| Westfall-Young max-T (multiplicity *and* clustering) | 0.306 |
+
+A family of **seven** is enough to destroy a p of 0.0074. Twelve of the 51
+variants reached raw p < 0.05, which is what selection looks like, not twelve
+real effects.
+
+Nested selection put the honest gain at **+0.03**, against +0.10 as reported.
+
+> Count the configurations you tried before you quote a p-value. If you cannot
+> reconstruct the count, you cannot quote the p-value.
+
+**And note what cross-validation does not fix.** The k-fold in `cv5_*` makes the
+*detector* out-of-fold. It does nothing for the *tracer*, whose parameters were
+chosen on the pooled out-of-fold predictions of all 41 images. There is at
+present **no held-out estimate anywhere in this project**: the detection
+threshold, match distance, coverage tolerance, `width_px` and both tracer
+parameters were all fixed by looking at these same images.
+
+## 6. Small samples do not support the claims they seem to
 
 The test split holds **20 fibrils**. Recall going 3/20 → 7/20 looks large and is
 **not significant**: exact McNemar p = 0.22, Clopper-Pearson intervals
