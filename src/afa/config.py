@@ -21,11 +21,11 @@ class DetectConfig:
 class TraceConfig:
     resample_step: float = 1.0
     smooth_window: int = 5
-    min_branch_px: int = 15
+    min_branch_px: int = 20
     link_crossings: bool = True
     max_link_angle_deg: float = 60.0
     merge_junction_px: float = 15.0
-    bridge_gap_px: float = 60.0
+    bridge_gap_px: float = 80.0
     bridge_angle_deg: float = 30.0
     min_bridge_evidence: float = 0.25
 
