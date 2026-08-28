@@ -13,6 +13,7 @@ def save_overlay(
     out_path: str | Path,
     *,
     labels: list[str] | None = None,
+    reference: list[np.ndarray] | None = None,
     linewidth: float = 1.2,
     dpi: int = 200,
 ) -> Path:
@@ -28,6 +29,10 @@ def save_overlay(
         Where to write the PNG.
     labels:
         Optional per-fibril labels drawn near each trace start.
+    reference:
+        Manual traces, drawn underneath in a single flat colour. Without them an
+        overlay shows what the detector found but not whether it is right, which
+        is the only question worth asking of one.
     """
     import matplotlib  # noqa: PLC0415
 
@@ -46,6 +51,11 @@ def save_overlay(
 
     # `cm.get_cmap` was removed in matplotlib 3.9; `colormaps[...].resampled`
     # is the supported equivalent (available since 3.6).
+    if reference:
+        for ref in reference:
+            ref = np.asarray(ref)
+            ax.plot(ref[:, 0], ref[:, 1], "-", lw=linewidth * 2.2, color="#00d0ff", alpha=0.55)
+
     colors = matplotlib.colormaps["hsv"].resampled(max(len(centerlines), 1))
     for i, cl in enumerate(centerlines):
         cl = np.asarray(cl)

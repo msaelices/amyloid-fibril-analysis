@@ -30,3 +30,16 @@ def test_save_overlay_handles_no_centerlines(tmp_path):
     image = np.zeros((32, 32), dtype=np.float32)
     out = save_overlay(image, [], tmp_path / "empty.png")
     assert out.exists()
+
+
+def test_overlay_draws_the_manual_reference_when_given(tmp_path):
+    """An overlay without the ground truth cannot answer whether it is right."""
+    image = np.zeros((64, 64), dtype=np.float32)
+    predicted = [np.column_stack([np.arange(10, 50), np.full(40, 20.0)])]
+    manual = [np.column_stack([np.arange(10, 50), np.full(40, 22.0)])]
+
+    plain = save_overlay(image, predicted, tmp_path / "plain.png")
+    withref = save_overlay(image, predicted, tmp_path / "ref.png", reference=manual)
+
+    assert plain.exists() and withref.exists()
+    assert withref.stat().st_size != plain.stat().st_size
