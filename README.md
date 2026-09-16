@@ -26,11 +26,12 @@ Physical units come from the pixel size in the `.mrc` header (overridable).
 Curvature is computed on a smoothed, arc-length-resampled centerline, because raw
 pixel discretization makes curvature noisy.
 
-> **On the current annotation batch there is no pixel size**, because the
-> annotated images are screenshots rather than micrographs, so lengths and
-> curvature come out in screen pixels. `tortuosity` and `total_abs_turning` are
-> dimensionless and exact regardless, and ratios between patients are valid for
-> every metric. See issue #4.
+> **The annotated images are screenshots, not micrographs**, so their pixel size
+> is calibrated rather than read. Matching 5 screenshots to their `.mrc`
+> originals (`scripts/match_mrc.py`) gives **0.3299 nm/px**, 4x the 0.826 Å/px of
+> the micrographs. The `afa` commands read `.mrc` files and take the pixel size
+> from the header; the scripts that work on the screenshots need it passed, as
+> `--pixel-size-nm 0.3299`, or lengths and curvature come out in screen pixels.
 
 ## Outputs
 

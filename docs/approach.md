@@ -30,10 +30,11 @@ Two consequences run through everything:
   visible. Unlabelled is not negative, so ridge-like unannotated pixels are
   marked *ignore* rather than background. This distorts every metric restricted
   to the complement (`traps.md` §1).
-- **The images are screenshots, not micrographs**, so there is no pixel size and
-  lengths come out in screen pixels. `tortuosity` and `total_abs_turning` are
-  dimensionless and exact regardless; ratios between patients are valid for
-  every metric. Absolute nm needs the `.mrc` files (issue #4).
+- **The images are screenshots, not micrographs**, so the pixel size is not in
+  any header. It was calibrated by matching 5 screenshots to their `.mrc`
+  originals (`scripts/match_mrc.py`): **0.3299 nm/px**, a 4x downsample of the
+  0.826 Å/px micrographs. It has to be passed explicitly; without it, lengths
+  come out in screen pixels.
 
 ## Detection
 
