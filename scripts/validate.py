@@ -162,7 +162,10 @@ def main() -> None:
 
         if args.overlays:
             save_overlay(
-                item.image, predicted, args.out / f"overlay_{item.image_id}.png"
+                item.image,
+                predicted,
+                args.out / f"overlay_{item.image_id}.png",
+                reference=item.centerlines,
             )
 
     per_image_df = pd.DataFrame(per_image)
