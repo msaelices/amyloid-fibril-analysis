@@ -48,9 +48,11 @@ Reading `.mrc` and computing the metrics is the easy, deterministic part. The
 hard part is **finding the fibrils** in low-SNR micrographs with crossings.
 
 - **Detection.** The classical vesselness baseline is weak here: coverage 0.14
-  against **0.78** for the trained U-Net. Use the learned detector.
+  against **0.78** for the trained U-Net on the same 8 held-out images. Use the
+  learned detector.
 - **Annotation.** The manual traces were drawn *beside* each fibril, so they are
-  snapped onto the ridge first (`trace/snap.py`). Only a few fibrils per image
+  snapped onto the ridge first (`trace/snap.py`), and `scripts/qc_traces.py`
+  renders each snapped trace for checking by eye. Only a few fibrils per image
   were traced, so unlabelled pixels are treated as unknown, not background.
 - **Tracing.** Skeletonize, pair branch ends per junction by collinearity,
   collapse crossing bridges, and join fragments across gaps **only where the
@@ -61,7 +63,7 @@ hard part is **finding the fibrils** in low-SNR micrographs with crossings.
 
 ## New to this code? Read in this order
 
-1. **[`docs/traps.md`](docs/traps.md)** — five mistakes already made here, four
+1. **[`docs/traps.md`](docs/traps.md)** — six mistakes already made here, five
    of which the test suite could not catch. Highest value per minute here.
 2. **[`docs/approach.md`](docs/approach.md)** — what the pipeline does.
 3. **[`docs/decisions.md`](docs/decisions.md)** — why the alternatives lost,
@@ -89,7 +91,7 @@ src/afa/
   pipeline.py    # end-to-end orchestration
   cli.py         # `afa` command-line interface
 configs/         # YAML pipeline configs
-scripts/         # training, validation, run comparison, one-off imports
+scripts/         # training, validation, cross-validation, trace QC, .mrc matching, imports
 reports/         # tracked training run history (weights are not tracked)
 tests/           # unit tests (metrics verified against analytic shapes)
 data/            # gitignored -- never commit patient data
@@ -122,25 +124,40 @@ afa summarize outputs/per_image.csv --out outputs/per_patient.csv
 
 The whole pipeline runs end to end: annotation import, trace snapping, U-Net
 training and tiled inference, tracing, metrics, per-patient statistics and a
-validation harness. 78 tests, CI green.
+validation harness. 93 tests, CI green.
 
-Measured on 8 held-out images (20 manual fibrils), against the classical
-baseline:
+Cross-validated over all 41 annotated images (5 folds, 111 manual fibrils, every
+image scored by a model that never saw it):
 
-| | classical | U-Net |
-| --- | --- | --- |
-| Coverage of manual fibrils | 0.14 | **0.78** |
-| One-to-one recall | 0/20 | 7/20 |
-| Length error on matched fibrils | — | 19% |
+| | U-Net |
+| --- | --- |
+| One-to-one recall | **0.252** (28/111), 95% CI [0.175, 0.344] |
+| Coverage of manual fibrils | 0.735 |
+| Objects produced per image | 97, where 1 to 8 were traced |
+| Length error on matched fibrils | 17% |
+| Tortuosity error on matched fibrils | 11% |
+| Curvature error on matched fibrils | 95% to 500% |
 
-Two things to keep in mind when reading those numbers. **Detection works;
-tracing is the remaining problem** — 92 objects are produced per image where 1
-to 8 were traced. And **20 fibrils cannot establish much**: the recall
-difference is not statistically significant (`docs/traps.md` §5).
+Three things to keep in mind when reading those numbers.
 
-The largest single blocker is not code. Without the original `.mrc` files there
-is no pixel size, so five of the seven descriptors are in screen pixels rather
-than nm (issue #4). See the [open issues](../../issues) for the rest.
+- **Detection works; tracing is the remaining problem.** The fibrils are found,
+  but come out in pieces, and every break and spur adds a bend that is not
+  there. That is why curvature is unusable while length and tortuosity are not
+  (issue #7).
+- **Expect about 0.25 on new data, not more.** The tracer settings were chosen
+  on these same 41 images. A nested estimate that re-chooses them on four fifths
+  and scores the held-out fifth gives 0.281 +/- 0.018, against 0.351 when the
+  same images are used for both (`docs/traps.md` section 5,
+  [`reports/README.md`](reports/README.md)). A defensible number needs new
+  annotation (issue #8).
+- **The classical baseline was only scored on an 8-image split**: coverage 0.14
+  and 0/20 recall, against 0.78 and 7/20 for the U-Net on the same images.
+
+The most promising next step is not in this code. RELION 5.1's amyloid tracer
+detects the 4.75 Å cross-β repeat directly, which may replace the detector,
+but it needs the full-resolution `.mrc` files: screenshots cannot resolve
+anything finer than 6.6 Å (issue #21). See the [open issues](../../issues) for
+the rest.
 
 ## License
 
